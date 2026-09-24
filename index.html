@@ -118,7 +118,10 @@
 </div>
 
 <script>
-const SERVICE = 0xffe0, CHAR_WRITE = 0xffe1, CHAR_NOTIFY = 0xfff4;
+// UUID complets en texte (Bluefy n'accepte pas les UUID numériques courts type 0xffe0)
+const SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
+const CHAR_WRITE = '0000ffe1-0000-1000-8000-00805f9b34fb';
+const CHAR_NOTIFY = '0000fff4-0000-1000-8000-00805f9b34fb';
 const DEFAULT = { power: 1, color: '#ff0000', bri: 100 };
 
 let device = null, chWrite = null;
@@ -196,7 +199,7 @@ async function connect() {
 
     // État par défaut : allumé, rouge, 100 %
     send(cmd.power(1)); setColor(DEFAULT.color); setBri(DEFAULT.bri);
-  } catch (e) { log('✖ ' + e.message); $('status').textContent = 'Déconnecté'; }
+  } catch (e) { log('✖ ' + e.name + ' : ' + e.message); $('status').textContent = 'Déconnecté'; }
 }
 function onDisconnected() {
   chWrite = null; $('status').textContent = 'Déconnecté'; $('status').className = '';
