@@ -439,6 +439,22 @@ nav.tabs.glass,.nowbar.glass,.toast.glass{background:linear-gradient(160deg,rgba
 </div>
 
 <script>
+/* Diagnostic : affiche à l'écran toute erreur JavaScript (utile dans Bluefy, sans console) */
+(function () {
+  function show(msg) {
+    var d = document.getElementById('errbox');
+    if (!d) { d = document.createElement('div'); d.id = 'errbox';
+      d.style.cssText = 'position:fixed;z-index:99;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px);padding:12px 14px;border-radius:14px;background:#b00020;color:#fff;font:13px/1.4 -apple-system,sans-serif;white-space:pre-wrap';
+      d.onclick = function () { d.remove(); };
+      (document.body || document.documentElement).appendChild(d); }
+    d.textContent = '⚠ ' + msg + '\n(touche pour fermer)';
+  }
+  window.addEventListener('error', function (e) { show((e.message || 'Erreur') + (e.lineno ? ' — ligne ' + e.lineno : '')); });
+  window.addEventListener('unhandledrejection', function (e) { show('Promesse rejetée : ' + (e.reason && e.reason.message || e.reason)); });
+  window.__showErr = show;
+})();
+</script>
+<script>
 'use strict';
 /* =====================================================================
    Clio Ambient — contrôle du kit LED LEDCAR-01 (Web Bluetooth / Bluefy)
@@ -489,7 +505,8 @@ const DEFAULT_STATE = {
 };
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-const S = Object.assign(structuredClone(DEFAULT_STATE), load('ca.state', {}));
+const clone = o => JSON.parse(JSON.stringify(o));
+const S = Object.assign(clone(DEFAULT_STATE), load('ca.state', {}));
 S.settings = Object.assign({}, DEFAULT_STATE.settings, S.settings);
 S.zones = Object.assign({}, DEFAULT_STATE.zones, S.zones);
 S.custom = Object.assign({}, DEFAULT_STATE.custom, S.custom);
@@ -563,7 +580,7 @@ async function connect(dev) {
     if (S.settings.applyDefault) { S.on = true; S.mode = 'color'; applyColor('#ff0000', { send: false }); S.bri = 100; renderAll(); }
     resendState();
   } catch (e) {
-    if (e.name === 'NotFoundError') { setConn('off', 'Déconnecté'); return; }
+    if (e.name === 'NotFoundError') { setConn('off', 'Déconnecté'); toast('Aucun appareil choisi (' + e.message + ')'); return; }
     log('✖ ' + e.name + ' : ' + e.message);
     setConn('off', 'Déconnecté');
     toast('Connexion impossible : ' + e.message);
@@ -869,7 +886,7 @@ $('#sheetBg').onclick = closeSheet;
 $('#sheetList').addEventListener('click', e => {
   const o = e.target.closest('[data-pick]'); if (!o) return; const k = o.dataset.pick;
   const sc = k === 'cur' ? snapshot(stateLabel()) : k[0] === 'm' ? scenes[+k.slice(1)] : SUGGESTIONS.find(s => 's' + s.id === k);
-  favs[favSlot] = structuredClone(sc); save('ca.favs', favs); renderFavs(); closeSheet(); toast('Favori ' + (favSlot + 1) + ' : ' + sc.name);
+  favs[favSlot] = clone(sc); save('ca.favs', favs); renderFavs(); closeSheet(); toast('Favori ' + (favSlot + 1) + ' : ' + sc.name);
 });
 $('#favs').addEventListener('click', e => {
   const d = e.target.closest('[data-fdel]');
@@ -961,7 +978,11 @@ $('#quickColors').addEventListener('click', e => { const b = e.target.closest('.
 $$('[data-kelvin]').forEach(b => b.onclick = () => { applyColor(rgb2hex(...kelvin2rgb(+b.dataset.kelvin))); haptic(); });
 
 $('#powerBtn').onclick = () => setPower(!S.on);
-$('#connectBtn').onclick = () => connect();
+$('#connectBtn').onclick = () => {
+  if (!navigator.bluetooth) { window.__showErr('navigator.bluetooth absent : ouvre la page dans Bluefy.'); return; }
+  setConn('busy', 'Ouverture du sélecteur…');
+  connect().finally(() => { if (!chWrite && $('#statusTxt').textContent.startsWith('Ouverture')) setConn('off', 'Déconnecté'); });
+};
 $('#disconnectBtn').onclick = () => { manualDisconnect = true; device?.gatt?.connected && device.gatt.disconnect(); };
 
 // onglets
