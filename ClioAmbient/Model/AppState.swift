@@ -123,25 +123,42 @@ final class AppState: ObservableObject {
 
     func setHex(_ hex: String, send: Bool = true, keepHS: Bool = false) {
         guard let c = ColorMath.hexToRGB(hex) else { return }
-        s.hex = ColorMath.rgbToHex(c)
+        var hue: Double?, sat: Double?
         if !keepHS {
             let hsv = ColorMath.rgbToHSV(c)
-            if hsv.s > 3 { s.hue = hsv.h }
-            s.sat = hsv.s
+            if hsv.s > 3 { hue = hsv.h }
+            sat = hsv.s
         }
-        s.mode = .color
-        if send { ble.send("color", LED.color(c.r, c.g, c.b, s.target)); ensureOn() }
+        applyColor(c, hue: hue, sat: sat, send: send)
     }
 
     func setHueSat(_ h: Double, _ sat: Double) {
-        s.hue = (h.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360).rounded()
-        s.sat = max(0, min(100, sat)).rounded()
-        setHex(ColorMath.rgbToHex(ColorMath.hsvToRGB(h: s.hue, s: s.sat, v: 100)), keepHS: true)
+        let hue = (h.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360).rounded()
+        let sat = max(0, min(100, sat)).rounded()
+        // Le glisser envoie ~120 évènements/s : on ignore ceux qui ne changent rien
+        if hue == s.hue, sat == s.sat, s.mode == .color, s.on { return }
+        applyColor(ColorMath.hsvToRGB(h: hue, s: sat, v: 100), hue: hue, sat: sat, send: true)
+    }
+
+    /// Modifications groupées sur une copie : une seule notification SwiftUI au lieu d'une par champ.
+    private func applyColor(_ c: RGB, hue: Double?, sat: Double?, send: Bool) {
+        var n = s
+        n.hex = ColorMath.rgbToHex(c)
+        if let hue { n.hue = hue }
+        if let sat { n.sat = sat }
+        n.mode = .color
+        if send && !n.on { n.on = true; ble.send("power", LED.power(true, n.target)) }
+        s = n
+        if send { ble.send("color", LED.color(c.r, c.g, c.b, n.target)) }
     }
 
     func setBrightness(_ p: Int) {
-        s.brightness = max(1, min(100, p))
-        ble.send("bri", LED.brightness(s.brightness, s.target)); ensureOn()
+        let v = max(1, min(100, p))
+        var n = s
+        n.brightness = v
+        if !n.on { n.on = true; ble.send("power", LED.power(true, n.target)) }
+        s = n
+        ble.send("bri", LED.brightness(v, s.target))
     }
 
     func playEffect(_ id: Int) {

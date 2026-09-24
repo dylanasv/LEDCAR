@@ -52,21 +52,41 @@ struct AmbientBackground: View {
             let w = geo.size.width
             ZStack {
                 Color(red: 0.027, green: 0.03, blue: 0.047)
-                Circle().fill(color).frame(width: w * 1.1).offset(x: drift ? -w * 0.2 : -w * 0.35, y: drift ? -geo.size.height * 0.3 : -geo.size.height * 0.38)
-                    .opacity(0.9)
-                Circle().fill(color).frame(width: w * 0.9).offset(x: drift ? w * 0.4 : w * 0.3, y: drift ? geo.size.height * 0.28 : geo.size.height * 0.2)
-                    .opacity(0.5)
-                Circle().fill(Color(red: 0.23, green: 0.36, blue: 1)).frame(width: w * 0.7).offset(x: drift ? w * 0.1 : -w * 0.05, y: geo.size.height * 0.1)
-                    .opacity(0.3)
+                Group {
+                    Glow(color: color, diameter: w * 1.1).offset(x: drift ? -w * 0.2 : -w * 0.35, y: drift ? -geo.size.height * 0.3 : -geo.size.height * 0.38)
+                        .opacity(0.9)
+                    Glow(color: color, diameter: w * 0.9).offset(x: drift ? w * 0.4 : w * 0.3, y: drift ? geo.size.height * 0.28 : geo.size.height * 0.2)
+                        .opacity(0.5)
+                    Glow(color: Color(red: 0.23, green: 0.36, blue: 1), diameter: w * 0.7).offset(x: drift ? w * 0.1 : -w * 0.05, y: geo.size.height * 0.1)
+                        .opacity(0.3)
+                }
+                .opacity(strength)
             }
-            .blur(radius: 90)
-            .opacity(strength)
             .overlay(RadialGradient(colors: [.clear, .black.opacity(0.6)], center: .top, startRadius: w * 0.4, endRadius: geo.size.height))
             .animation(.easeInOut(duration: 0.6), value: color)
             .animation(.easeInOut(duration: 0.6), value: strength)
         }
         .ignoresSafeArea()
         .onAppear { withAnimation(.easeInOut(duration: 16).repeatForever(autoreverses: true)) { drift = true } }
+    }
+}
+
+/// Tache de lumière floue. Un dégradé radial donne le même rendu qu'un `.blur(radius: 90)`
+/// sans le coût GPU d'un flou plein écran recalculé à chaque changement de couleur.
+private struct Glow: View {
+    var color: Color
+    var diameter: CGFloat
+    private let spread: CGFloat = 90
+
+    var body: some View {
+        let r = diameter / 2 + spread
+        Circle()
+            .fill(RadialGradient(stops: [.init(color: color, location: 0),
+                                         .init(color: color.opacity(0.85), location: 0.3),
+                                         .init(color: color.opacity(0.35), location: 0.6),
+                                         .init(color: color.opacity(0), location: 1)],
+                                 center: .center, startRadius: 0, endRadius: r))
+            .frame(width: r * 2, height: r * 2)
     }
 }
 

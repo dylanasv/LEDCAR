@@ -19,8 +19,6 @@ struct RootView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            AmbientBackground(color: app.glow, strength: app.glowStrength)
-
             TabView(selection: $tab) {
                 ColorView().background { AmbientBackground(color: app.glow, strength: app.glowStrength) }
                     .tabItem { Label("Couleur", systemImage: "circle.circle.fill") }.tag(0)

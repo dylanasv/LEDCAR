@@ -114,14 +114,18 @@ struct HueRing: View {
             let knobR = r - thickness / 2
             let a = (app.s.hue - 90) * .pi / 180
             ZStack {
+                // Halo en dégradé plutôt qu'en ombres floues : ces ombres étaient recalculées à chaque pas du glisser
                 Circle()
-                    .strokeBorder(AngularGradient(colors: Color.hueStops, center: .center, startAngle: .degrees(-90), endAngle: .degrees(270)),
-                                  lineWidth: thickness)
-                    .shadow(color: app.glow.opacity(0.5), radius: 30)
+                    .fill(RadialGradient(stops: [.init(color: app.glow.opacity(0.8), location: 0.2),
+                                                 .init(color: app.glow.opacity(0.35), location: 0.7),
+                                                 .init(color: app.glow.opacity(0), location: 1)],
+                                         center: .center, startRadius: 0, endRadius: size * 0.62))
+                    .frame(width: size * 1.24, height: size * 1.24)
+                    .allowsHitTesting(false)
+                HueWheel(thickness: thickness)
                 Circle().fill(app.glow)
                     .frame(width: size * 0.46, height: size * 0.46)
                     .overlay(Circle().fill(RadialGradient(colors: [.white.opacity(0.35), .clear], center: .topLeading, startRadius: 0, endRadius: size * 0.3)))
-                    .shadow(color: app.glow.opacity(0.8), radius: 24)
                 VStack(spacing: 2) {
                     Text(app.s.mode == .color ? app.colorName : app.currentLabel).font(.headline).lineLimit(1).minimumScaleFactor(0.6)
                     Text(app.s.hex).font(.caption.monospaced()).opacity(0.85)
@@ -147,6 +151,17 @@ struct HueRing: View {
             .frame(maxWidth: .infinity)
         }
         .frame(height: 300)
+    }
+}
+
+/// Anneau de teintes : ne dépend d'aucun état, SwiftUI ne le redessine donc pas pendant le glisser.
+private struct HueWheel: View, Equatable {
+    var thickness: CGFloat
+    var body: some View {
+        Circle()
+            .strokeBorder(AngularGradient(colors: Color.hueStops, center: .center, startAngle: .degrees(-90), endAngle: .degrees(270)),
+                          lineWidth: thickness)
+            .drawingGroup()
     }
 }
 

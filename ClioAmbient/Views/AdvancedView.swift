@@ -197,21 +197,7 @@ struct AdvancedView: View {
                             .background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.08)))
                         Button("Envoyer", action: sendRaw).buttonStyle(.bordered).tint(.white)
                     }
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 2) {
-                                ForEach(Array(app.ble.logLines.enumerated()), id: \.offset) { i, l in
-                                    Text(l).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).id(i)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                        }
-                        .frame(height: 180)
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(.black.opacity(0.35)))
-                        .onChange(of: app.ble.logLines.count) { _, n in proxy.scrollTo(n - 1, anchor: .bottom) }
-                    }
+                    ConsoleLog(console: app.ble.console)
                 }
                 .padding(.top, 8)
             } label: {
@@ -298,5 +284,28 @@ struct ColorWheel: View {
             .frame(maxWidth: .infinity)
         }
         .frame(height: 270)
+    }
+}
+
+/// Journal BLE : observe directement la console pour ne pas redessiner le reste de l'appli à chaque trame.
+private struct ConsoleLog: View {
+    @ObservedObject var console: BLEConsole
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(console.lines) { l in
+                        Text(l.text).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).id(l.id)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+            }
+            .frame(height: 180)
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(.black.opacity(0.35)))
+            .onChange(of: console.lines.last?.id) { _, id in if let id { proxy.scrollTo(id, anchor: .bottom) } }
+        }
     }
 }

@@ -30,7 +30,8 @@ final class BLEManager: NSObject, ObservableObject {
     @Published private(set) var status: Status = .idle
     @Published private(set) var deviceName: String?
     @Published private(set) var found: [Found] = []
-    @Published private(set) var logLines: [String] = []
+    /// Journal séparé : il change à chaque trame, on ne veut pas redessiner toute l'appli pour ça.
+    let console = BLEConsole()
 
     /// Appelé à chaque (re)connexion réussie, pour renvoyer l'état courant.
     var onConnected: (() -> Void)?
@@ -133,10 +134,20 @@ final class BLEManager: NSObject, ObservableObject {
         }
     }
 
-    func log(_ s: String) {
-        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"
-        logLines.append(f.string(from: Date()) + "  " + s)
-        if logLines.count > 250 { logLines.removeFirst(logLines.count - 250) }
+    func log(_ s: String) { console.append(s) }
+}
+
+/// Journal de la console développeur, observé uniquement par la vue qui l'affiche.
+final class BLEConsole: ObservableObject {
+    struct Line: Identifiable { let id: Int; let text: String }
+    @Published private(set) var lines: [Line] = []
+    private var next = 0
+    private static let time: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f }()
+
+    func append(_ s: String) {
+        lines.append(Line(id: next, text: Self.time.string(from: Date()) + "  " + s))
+        next += 1
+        if lines.count > 250 { lines.removeFirst(lines.count - 250) }
     }
 }
 
