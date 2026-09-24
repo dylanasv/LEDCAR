@@ -2,269 +2,1035 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LEDCAR Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#07080c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Clio Ambient</title>
 <style>
-  :root { --bg:#0e0f12; --card:#181a20; --line:#2a2d36; --txt:#e8e9ee; --mut:#8b8f9c; --acc:#e53935; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif; padding:16px; max-width:640px; margin-inline:auto; }
-  h1 { font-size:20px; margin:0 0 12px; }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0 0 10px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  button { background:#2a2d36; color:var(--txt); border:0; border-radius:8px; padding:10px 14px; font:inherit; cursor:pointer; }
-  button.pri { background:var(--acc); }
-  button:disabled { opacity:.4; cursor:default; }
-  input[type=range] { flex:1; min-width:150px; accent-color:var(--acc); }
-  input[type=color] { width:56px; height:44px; border:0; background:none; padding:0; }
-  input[type=number], input[type=text] { background:#0e0f12; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:9px; font:inherit; }
-  input[type=text] { flex:1; font-family:ui-monospace,Consolas,monospace; }
-  .sw { width:36px; height:36px; border-radius:50%; border:2px solid var(--line); padding:0; }
-  .val { min-width:44px; text-align:right; font-variant-numeric:tabular-nums; color:var(--mut); }
-  #status { font-size:13px; color:var(--mut); }
-  #status.ok { color:#4caf50; }
-  #log { font:12px/1.5 ui-monospace,Consolas,monospace; background:#0a0b0d; border-radius:8px; padding:8px; height:160px; overflow:auto; white-space:pre-wrap; color:#9aa0ad; }
-  .scene { display:flex; gap:4px; }
-  .scene button:last-child { padding:10px; color:var(--mut); }
-  .dis { opacity:.45; pointer-events:none; }
+:root{
+  --glow:#ff2a2a; --glowA:.55;
+  --bg:#07080c; --txt:#f4f5f8; --mut:rgba(235,238,245,.58); --dim:rgba(235,238,245,.34);
+  --glass:rgba(255,255,255,.07); --glass2:rgba(255,255,255,.11); --stroke:rgba(255,255,255,.13);
+  --hi:rgba(255,255,255,.22); --r:26px;
+  --safeT:env(safe-area-inset-top,0px); --safeB:env(safe-area-inset-bottom,0px);
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);overscroll-behavior:none}
+body{font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+input,button{font:inherit;color:inherit}
+button{border:0;background:none;cursor:pointer;padding:0}
+
+/* ---------- Fond ambiant (reflète la couleur des LED) ---------- */
+.ambient{position:fixed;inset:-20%;z-index:0;pointer-events:none;filter:blur(60px);opacity:var(--glowA);transition:opacity .6s var(--ease)}
+.ambient i{position:absolute;border-radius:50%;background:var(--glow);transition:background .5s var(--ease)}
+.ambient i:nth-child(1){width:70vw;height:70vw;left:-5vw;top:-10vw;opacity:.9;animation:drift 18s ease-in-out infinite alternate}
+.ambient i:nth-child(2){width:60vw;height:60vw;right:-10vw;bottom:5vh;opacity:.55;animation:drift 22s ease-in-out infinite alternate-reverse}
+.ambient i:nth-child(3){width:45vw;height:45vw;left:30vw;top:45vh;opacity:.35;background:#3b5bff;animation:drift 26s ease-in-out infinite alternate}
+@keyframes drift{to{transform:translate(8vw,6vh) scale(1.12)}}
+.grain{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse at 50% 0%,transparent 40%,rgba(0,0,0,.55) 100%)}
+
+/* ---------- Verre liquide ---------- */
+.glass{position:relative;background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.04));
+  -webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);
+  border-radius:var(--r);box-shadow:inset 0 1px 0 var(--hi),inset 0 -1px 0 rgba(255,255,255,.04),0 10px 40px rgba(0,0,0,.35)}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(145deg,rgba(255,255,255,.35),rgba(255,255,255,.05) 40%,rgba(255,255,255,.02) 60%,rgba(255,255,255,.18));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+/* ---------- Structure ---------- */
+.app{position:relative;z-index:1;max-width:520px;margin:0 auto;min-height:100%;
+  padding:calc(var(--safeT) + 10px) 16px calc(var(--safeB) + 110px)}
+header{display:flex;align-items:center;gap:10px;margin:4px 0 18px}
+.brand{flex:1;min-width:0}
+.brand h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em}
+.status{display:inline-flex;align-items:center;gap:7px;margin-top:2px;font-size:13px;color:var(--mut)}
+.dot{width:8px;height:8px;border-radius:50%;background:#6b6f7a;box-shadow:0 0 0 3px rgba(107,111,122,.2);transition:.3s}
+.dot.on{background:#34d17a;box-shadow:0 0 0 3px rgba(52,209,122,.22),0 0 12px #34d17a}
+.dot.busy{background:#ffb020;box-shadow:0 0 0 3px rgba(255,176,32,.22);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.iconbtn{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;transition:transform .2s var(--ease)}
+.iconbtn:active{transform:scale(.92)}
+.iconbtn svg{width:24px;height:24px}
+#powerBtn.on{background:linear-gradient(160deg,var(--glow),color-mix(in srgb,var(--glow) 55%,#000));box-shadow:0 0 28px color-mix(in srgb,var(--glow) 60%,transparent),inset 0 1px 0 rgba(255,255,255,.4)}
+
+.page{display:none;animation:in .35s var(--ease)}
+.page.active{display:block}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+.card{padding:18px;margin-bottom:14px}
+.card h2{margin:0 0 14px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:8px}
+.card h2 .sp{flex:1}
+.hint{font-size:13px;color:var(--mut);line-height:1.45}
+.row{display:flex;align-items:center;gap:10px}
+.between{justify-content:space-between}
+
+/* ---------- Écran de connexion ---------- */
+#connectCard{padding:22px;text-align:center;margin-bottom:14px}
+#connectCard p{margin:6px 0 16px;color:var(--mut);font-size:14px}
+.cta{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:54px;padding:0 26px;border-radius:999px;font-weight:600;font-size:16px;
+  background:linear-gradient(160deg,#fff,#d9dce6);color:#0b0c10;box-shadow:0 8px 30px rgba(255,255,255,.15);transition:transform .2s var(--ease)}
+.cta:active{transform:scale(.96)}
+.cta svg{width:20px;height:20px}
+body.offline .needs-conn{opacity:.4;pointer-events:none;filter:saturate(.5)}
+
+/* ---------- Anneau de teinte ---------- */
+.ringWrap{position:relative;display:grid;place-items:center;padding:6px 0 4px}
+.ring{position:relative;width:min(76vw,300px);aspect-ratio:1;border-radius:50%;touch-action:none;
+  background:conic-gradient(#ff0000,#ff8000,#ffff00,#80ff00,#00ff00,#00ff80,#00ffff,#0080ff,#0000ff,#8000ff,#ff00ff,#ff0080,#ff0000);
+  -webkit-mask:radial-gradient(circle closest-side,transparent 72%,#000 73%);mask:radial-gradient(circle closest-side,transparent 72%,#000 73%)}
+.ringShadow{position:absolute;width:min(76vw,300px);aspect-ratio:1;border-radius:50%;box-shadow:0 0 60px color-mix(in srgb,var(--glow) 45%,transparent);pointer-events:none}
+.ringCenter{position:absolute;width:min(40vw,158px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;text-align:center}
+.swatch{position:absolute;inset:12px;border-radius:50%;background:var(--glow);box-shadow:0 0 40px var(--glow),inset 0 2px 8px rgba(255,255,255,.35),inset 0 -8px 20px rgba(0,0,0,.25);transition:background .25s,box-shadow .25s}
+.ringCenter .lbl{position:relative;font-weight:700;font-size:15px;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.45)}
+.ringCenter .lbl small{display:block;font-weight:500;font-size:12px;opacity:.85;letter-spacing:.04em}
+.knob{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 0 2px rgba(0,0,0,.08);pointer-events:none;transition:transform .15s var(--ease)}
+.dragging .knob{transform:scale(1.25)}
+
+.swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:12px 10px;justify-items:center;padding:4px 2px}
+.sw{width:100%;max-width:46px;aspect-ratio:1;border-radius:50%;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 14px rgba(0,0,0,.35);position:relative;transition:transform .2s var(--ease)}
+.sw:active{transform:scale(.9)}
+.sw.sel::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid #fff}
+.whites{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+
+/* ---------- Sliders ---------- */
+.slider{position:relative;height:52px;border-radius:18px;overflow:hidden;background:rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.slider input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;touch-action:none}
+.slider .fill{position:absolute;left:0;top:0;bottom:0;width:calc(var(--p,50) * 1%);background:linear-gradient(90deg,rgba(255,255,255,.55),rgba(255,255,255,.9));border-radius:18px 0 0 18px;pointer-events:none;transition:width .05s}
+.slider.tint .fill{background:linear-gradient(90deg,color-mix(in srgb,var(--glow) 35%,#222),var(--glow))}
+.slider .ico,.slider .val{position:absolute;top:50%;transform:translateY(-50%);pointer-events:none;font-weight:600;font-size:14px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.55)}
+.slider .ico{left:16px;display:flex;gap:8px;align-items:center}
+.slider .ico svg{width:20px;height:20px}
+.slider .val{right:16px;font-variant-numeric:tabular-nums}
+.slider.sm{height:40px;border-radius:14px}
+.slider.sm .fill{border-radius:14px 0 0 14px}
+.slider.track .fill{display:none}
+.slider.track{background:var(--trk)}
+.slider.track .thumb{position:absolute;top:4px;bottom:4px;width:8px;margin-left:-4px;left:calc(var(--p,50) * 1%);border-radius:4px;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.35);pointer-events:none}
+
+/* ---------- Pastilles / segmented ---------- */
+.pill{height:44px;padding:0 16px;border-radius:14px;background:var(--glass2);font-weight:600;font-size:14px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s var(--ease),background .2s}
+.pill:active{transform:scale(.95)}
+.pill.act{background:#fff;color:#0b0c10}
+/* Rangée défilante horizontale : glisser au doigt, molette ou cliquer-glisser à la souris, fondus aux bords */
+.chips{display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:6px 4px;margin:-6px -4px;
+  scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;cursor:grab;scroll-padding-inline:4px;--fl:0px;--fr:0px;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 var(--fl),#000 calc(100% - var(--fr)),transparent 100%)}
+.chips::-webkit-scrollbar{display:none}
+.chips>*{scroll-snap-align:start}
+.chips.grabbing{cursor:grabbing;scroll-snap-type:none}
+.chipgrid{display:grid;gap:8px}
+.chipgrid .chip{width:100%;padding:0 6px}
+#micChips{grid-template-columns:repeat(6,1fr)}
+#customStyles{grid-template-columns:repeat(4,1fr)}
+.chip{flex:0 0 auto;height:36px;padding:0 14px;border-radius:999px;background:var(--glass2);font-size:14px;font-weight:500;color:var(--mut);transition:.2s}
+.chip.act{background:#fff;color:#0b0c10;font-weight:600}
+.seg{display:flex;padding:4px;border-radius:16px;background:rgba(255,255,255,.07);gap:4px}
+.seg button{flex:1;height:38px;border-radius:12px;font-size:14px;font-weight:600;color:var(--mut);transition:.25s var(--ease)}
+.seg button.act{background:rgba(255,255,255,.9);color:#0b0c10;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.toggle{position:relative;width:52px;height:32px;border-radius:999px;background:rgba(255,255,255,.15);transition:.25s;flex:0 0 auto}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.3);transition:.25s var(--ease)}
+.toggle.on{background:#34d17a}
+.toggle.on::after{transform:translateX(20px)}
+.setting{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid rgba(255,255,255,.07)}
+.setting:first-of-type{border-top:0}
+.setting .t{flex:1}
+.setting .t b{display:block;font-weight:600;font-size:15px}
+.setting .t span{font-size:13px;color:var(--mut)}
+
+/* ---------- Effets ---------- */
+.search{display:flex;align-items:center;gap:10px;height:46px;padding:0 14px;border-radius:16px;margin-bottom:12px}
+.search svg{width:18px;height:18px;opacity:.6}
+.search input{flex:1;background:none;border:0;outline:0;font-size:16px;-webkit-user-select:text;user-select:text}
+.search input::placeholder{color:var(--dim)}
+.fxlist{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.fx{padding:10px;border-radius:20px;text-align:left;background:rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.08);transition:transform .15s var(--ease),background .2s}
+.fx:active{transform:scale(.97)}
+.fx.act{background:rgba(255,255,255,.16);box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.7),0 0 24px color-mix(in srgb,var(--glow) 35%,transparent)}
+.fx .pv{height:40px;border-radius:12px;background-size:200% 100%;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.fx.act .pv{animation:slide 2.4s linear infinite}
+.fx.act .pv.rev{animation-direction:reverse}
+.fx.act .pv.blink{animation:blink .7s steps(2) infinite}
+@keyframes slide{to{background-position:200% 0}}
+@keyframes blink{50%{filter:brightness(.2)}}
+.fx b{display:block;margin-top:8px;font-size:14px;font-weight:600;line-height:1.25}
+.fx span{display:block;font-size:12px;color:var(--mut);margin-top:2px}
+.nowbar{position:sticky;bottom:calc(var(--safeB) + 96px);z-index:5;padding:14px;margin-top:14px}
+.nowbar .name{font-weight:700;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nowbar .sub{font-size:12px;color:var(--mut)}
+.empty{grid-column:1/-1;text-align:center;color:var(--mut);padding:30px 0}
+
+/* ---------- Musique ---------- */
+.eq{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:56px;margin:4px 0 14px}
+.eq i{width:7px;border-radius:4px;background:linear-gradient(to top,var(--glow),#fff);height:20%;opacity:.8}
+.music-on .eq i{animation:eq 1s ease-in-out infinite}
+.eq i:nth-child(2){animation-delay:-.2s}.eq i:nth-child(3){animation-delay:-.5s}.eq i:nth-child(4){animation-delay:-.1s}.eq i:nth-child(5){animation-delay:-.7s}.eq i:nth-child(6){animation-delay:-.35s}.eq i:nth-child(7){animation-delay:-.6s}
+@keyframes eq{0%,100%{height:15%}50%{height:100%}}
+.stepper{display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:14px}
+.stepper .num{min-width:110px;text-align:center}
+.stepper .num b{display:block;font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.stepper .num span{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* ---------- Scènes ---------- */
+.scenes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.scene{position:relative;height:108px;border-radius:22px;padding:14px;text-align:left;overflow:hidden;transition:transform .15s var(--ease);box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 10px 30px rgba(0,0,0,.35)}
+.scene:active{transform:scale(.96)}
+.scene .bgc{position:absolute;inset:0;opacity:.9}
+.scene .bgc::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),transparent 70%)}
+.scene b,.scene span{position:relative;display:block}
+.scene b{position:absolute;left:14px;bottom:30px;font-size:16px;font-weight:700}
+.scene span{position:absolute;left:14px;bottom:12px;font-size:12px;opacity:.8}
+.scene .del{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,.55);display:none;place-items:center;font-size:14px}
+.editing .scene .del{display:grid}
+.editing .scene{animation:wig .25s ease-in-out infinite alternate}
+@keyframes wig{from{transform:rotate(-1deg)}to{transform:rotate(1deg)}}
+.secTitle{display:flex;align-items:center;margin:22px 4px 12px;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.secTitle .sp{flex:1}
+.scene .tag{position:absolute;top:10px;left:12px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:rgba(0,0,0,.35);opacity:.9}
+/* Favoris (onglet Couleur) */
+.favs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.favs .scene{height:92px;padding:10px}
+.favs .scene b{left:10px;bottom:24px;font-size:14px;right:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.favs .scene span{left:10px;bottom:8px;font-size:11px;right:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.favEmpty{height:92px;border-radius:22px;border:1.5px dashed rgba(255,255,255,.22);color:var(--mut);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:600;transition:transform .15s var(--ease),background .2s}
+.favEmpty:active{transform:scale(.96)}
+.favEmpty i{font-style:normal;font-size:24px;line-height:1}
+.favs.editing .scene .del{display:grid}
+/* Feuille de sélection */
+.sheetBg{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .3s}
+.sheetBg.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;z-index:41;left:50%;bottom:0;width:min(100%,520px);max-height:78vh;display:flex;flex-direction:column;
+  transform:translate(-50%,105%);transition:transform .38s var(--ease);border-radius:28px 28px 0 0;padding:10px 16px calc(var(--safeB) + 16px);
+  background:linear-gradient(160deg,rgba(44,46,58,.9),rgba(16,17,22,.94))}
+.sheet.open{transform:translate(-50%,0)}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:rgba(255,255,255,.3);margin:0 auto 12px}
+.sheet h3{margin:0 0 4px;font-size:18px}
+.sheet .hint{margin:0 0 10px}
+.sheetList{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:0 -6px;padding:0 6px}
+.sheetList h4{margin:14px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.opt{display:flex;align-items:center;gap:12px;width:100%;padding:10px;border-radius:16px;text-align:left;transition:background .2s}
+.opt:active,.opt:hover{background:rgba(255,255,255,.08)}
+.opt .dotc{width:40px;height:40px;border-radius:12px;flex:0 0 auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.opt b{display:block;font-size:15px}
+.opt span{font-size:12px;color:var(--mut)}
+.saveRow{display:flex;gap:8px}
+.saveRow input{flex:1;min-width:0;height:44px;border-radius:14px;border:0;outline:0;padding:0 14px;background:rgba(255,255,255,.08);font-size:16px;-webkit-user-select:text;user-select:text}
+
+/* ---------- Avancé ---------- */
+.wheelWrap{display:grid;place-items:center;margin-bottom:14px}
+.wheel{position:relative;width:min(72vw,270px);aspect-ratio:1;border-radius:50%;touch-action:none;
+  background:radial-gradient(circle closest-side,#fff,rgba(255,255,255,0) 100%),conic-gradient(from 90deg,#ff0000,#ff00ff,#0000ff,#00ffff,#00ff00,#ffff00,#ff0000);
+  box-shadow:0 0 0 6px rgba(255,255,255,.06),0 12px 40px rgba(0,0,0,.45)}
+.wheel .dim{position:absolute;inset:0;border-radius:50%;background:#000;opacity:0;pointer-events:none}
+.kv{display:grid;grid-template-columns:28px 1fr 44px;align-items:center;gap:10px;margin-top:10px}
+.kv label{font-weight:700;font-size:13px;color:var(--mut)}
+.kv output{text-align:right;font-variant-numeric:tabular-nums;font-size:13px;color:var(--mut)}
+.hexRow{display:flex;gap:10px;align-items:center;margin-top:14px}
+.hexRow .prev{width:44px;height:44px;border-radius:14px;flex:0 0 auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+.hexRow input{flex:1;min-width:0;height:44px;border-radius:14px;border:0;outline:0;padding:0 14px;background:rgba(255,255,255,.08);font:600 16px ui-monospace,SFMono-Regular,Menlo,monospace;text-transform:uppercase;-webkit-user-select:text;user-select:text}
+.zone{padding:14px;border-radius:20px;background:rgba(255,255,255,.05);margin-top:10px}
+.zone .top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.zone .zdot{width:30px;height:30px;border-radius:50%;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 14px currentColor}
+.zone .t{flex:1}
+.zone .t b{display:block;font-size:15px}
+.zone .t span{font-size:12px;color:var(--mut)}
+.slots{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:12px}
+.slot{aspect-ratio:1;border-radius:12px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.2);position:relative}
+.slot.vide::after{content:"+";position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font-size:18px}
+details{margin-top:4px}
+summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--mut);font-size:14px;padding:4px 0}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"›";margin-left:auto;transition:transform .2s;font-size:20px}
+details[open] summary::after{transform:rotate(90deg)}
+#log{font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(0,0,0,.35);border-radius:14px;padding:10px;height:170px;overflow:auto;white-space:pre-wrap;color:rgba(235,238,245,.7);margin-top:10px;-webkit-user-select:text;user-select:text}
+
+/* ---------- Barre d'onglets flottante ---------- */
+nav.tabs{position:fixed;z-index:20;left:50%;transform:translateX(-50%);bottom:calc(var(--safeB) + 14px);width:min(calc(100% - 28px),492px);
+  display:grid;grid-template-columns:repeat(5,1fr);padding:6px;border-radius:32px}
+nav.tabs button{height:58px;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10.5px;font-weight:600;color:var(--mut);transition:.25s var(--ease)}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button.act{color:#fff;background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.2)}
+nav.tabs button.act svg{filter:drop-shadow(0 0 8px color-mix(in srgb,var(--glow) 80%,transparent))}
+
+.toast{position:fixed;z-index:30;left:50%;top:calc(var(--safeT) + 12px);transform:translate(-50%,-140%);padding:12px 18px;border-radius:18px;font-weight:600;font-size:14px;transition:transform .4s var(--ease);max-width:90vw;text-align:center}
+.toast.show{transform:translate(-50%,0)}
+
+nav.tabs.glass,.nowbar.glass,.toast.glass{background:linear-gradient(160deg,rgba(40,42,52,.72),rgba(14,15,20,.78))}
+.fxlist{padding-bottom:8px}
 </style>
 </head>
-<body>
-<h1>LEDCAR-01 · page de test</h1>
+<body class="offline">
+<div class="ambient"><i></i><i></i><i></i></div>
+<div class="grain"></div>
 
-<div class="card">
-  <div class="row">
-    <button id="btnConnect" class="pri">Connecter</button>
-    <button id="btnDisconnect" disabled>Déconnecter</button>
-    <span id="status">Déconnecté</span>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1 id="pageTitle">Couleur</h1>
+      <div class="status"><span class="dot" id="dot"></span><span id="statusTxt">Déconnecté</span></div>
+    </div>
+    <button class="iconbtn glass needs-conn" id="powerBtn" aria-label="Allumer / éteindre">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+    </button>
+  </header>
+
+  <div id="connectCard" class="glass">
+    <div style="font-size:17px;font-weight:700">Contrôleur non connecté</div>
+    <p id="connectHint">Allume le contrôleur, puis appuie pour le connecter en Bluetooth.</p>
+    <button class="cta" id="connectBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+      Connecter
+    </button>
   </div>
+
+  <!-- ================= COULEUR ================= -->
+  <section class="page active" data-page="color" data-title="Couleur">
+    <div class="card glass needs-conn">
+      <div class="ringWrap">
+        <div class="ringShadow"></div>
+        <div class="ring" id="ring"></div>
+        <div class="knob" id="ringKnob"></div>
+        <div class="ringCenter"><div class="swatch"></div><div class="lbl" id="colorName">Rouge<small id="colorHex">#FF0000</small></div></div>
+      </div>
+    </div>
+    <div class="card glass needs-conn">
+      <div class="slider tint" id="briMain"><input type="range" min="1" max="100" value="100"><div class="fill"></div>
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Luminosité</div>
+        <div class="val">100%</div></div>
+    </div>
+    <div class="card glass needs-conn">
+      <h2>Favoris<span class="sp"></span><button class="chip" id="favEdit" style="height:30px;text-transform:none;letter-spacing:0">Modifier</button></h2>
+      <div class="favs" id="favs"></div>
+    </div>
+    <div class="card glass needs-conn">
+      <h2>Couleurs rapides</h2>
+      <div class="swatches" id="quickColors"></div>
+      <div class="whites">
+        <button class="pill" data-kelvin="2700">Chaud</button>
+        <button class="pill" data-kelvin="4500">Neutre</button>
+        <button class="pill" data-kelvin="7500">Froid</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= EFFETS ================= -->
+  <section class="page" data-page="fx" data-title="Effets">
+    <div class="search glass needs-conn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="fxSearch" type="search" placeholder="Rechercher un effet, une couleur…" autocomplete="off">
+    </div>
+    <div class="chips needs-conn" id="fxCats"></div>
+    <div class="fxlist needs-conn" id="fxList"></div>
+    <div class="nowbar glass needs-conn" id="nowbar">
+      <div class="row" style="margin-bottom:12px">
+        <div style="flex:1;min-width:0"><div class="sub">En cours</div><div class="name" id="nowName">Aucun effet</div></div>
+        <button class="pill" id="fxAuto">Auto</button>
+      </div>
+      <div class="seg" id="fxDir" style="margin-bottom:10px;display:none"></div>
+      <div class="slider sm" id="speed"><input type="range" min="1" max="100" value="50"><div class="fill"></div>
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg>Vitesse</div><div class="val">50%</div></div>
+    </div>
+  </section>
+
+  <!-- ================= MUSIQUE ================= -->
+  <section class="page" data-page="music" data-title="Musique">
+    <div class="card glass needs-conn" id="musicCard">
+      <h2>Micro du boîtier</h2>
+      <div class="eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="stepper">
+        <button class="iconbtn glass" id="micPrev" aria-label="Mode précédent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <div class="num"><b id="micNum">1</b><span>Mode</span></div>
+        <button class="iconbtn glass" id="micNext" aria-label="Mode suivant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+      <div class="chipgrid" id="micChips" style="margin-bottom:14px"></div>
+      <div class="slider sm tint" id="sens"><input type="range" min="1" max="100" value="90"><div class="fill"></div>
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Sensibilité</div><div class="val">90%</div></div>
+      <p class="hint" style="margin:12px 0 0">Le micro est dans le module principal. Une fois caché derrière le CarPlay, monte la sensibilité vers 100 %.</p>
+    </div>
+    <div class="card glass needs-conn">
+      <h2>Styles simples · canal RGB</h2>
+      <div class="grid4">
+        <button class="pill" data-voicergb="0">Saut</button><button class="pill" data-voicergb="1">Souffle</button>
+        <button class="pill" data-voicergb="2">Flash</button><button class="pill" data-voicergb="3">Fondu</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SCÈNES ================= -->
+  <section class="page" data-page="scenes" data-title="Scènes">
+    <div class="card glass needs-conn">
+      <h2>Enregistrer l'ambiance actuelle</h2>
+      <div class="saveRow"><input id="sceneName" placeholder="Nom (ex. Nuit sur l'A13)" maxlength="28"><button class="pill act" id="sceneSave">Enregistrer</button></div>
+    </div>
+    <div class="secTitle">Mes scènes<span class="sp"></span><button class="chip" id="sceneEdit" style="height:30px;text-transform:none;letter-spacing:0">Modifier</button></div>
+    <div class="scenes needs-conn" id="scenes"></div>
+    <div class="secTitle">Suggestions</div>
+    <div class="chips needs-conn" id="sugCats" style="margin-bottom:12px"></div>
+    <div class="scenes needs-conn" id="suggestions"></div>
+  </section>
+
+  <!-- ================= AVANCÉ ================= -->
+  <section class="page" data-page="adv" data-title="Avancé">
+    <div class="card glass needs-conn">
+      <h2>Roue chromatique</h2>
+      <div class="wheelWrap"><div class="wheel" id="wheel"><div class="dim" id="wheelDim"></div><div class="knob" id="wheelKnob"></div></div></div>
+      <div class="kv"><label>T</label><div class="slider sm track" id="advHue" style="--trk:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"><input type="range" min="0" max="359" value="0"><div class="thumb"></div></div><output id="advHueV">0°</output></div>
+      <div class="kv"><label>S</label><div class="slider sm track" id="advSat"><input type="range" min="0" max="100" value="100"><div class="thumb"></div></div><output id="advSatV">100%</output></div>
+      <div class="kv"><label>L</label><div class="slider sm track" id="advBri" style="--trk:linear-gradient(90deg,#000,#fff)"><input type="range" min="1" max="100" value="100"><div class="thumb"></div></div><output id="advBriV">100%</output></div>
+      <div class="kv"><label>K</label><div class="slider sm track" id="advK" style="--trk:linear-gradient(90deg,#ff8a1c,#ffd6a5,#fff,#cfe0ff,#9fbfff)"><input type="range" min="1800" max="10000" step="100" value="6500"><div class="thumb"></div></div><output id="advKV">6500K</output></div>
+      <details style="margin-top:12px"><summary>Canaux RVB</summary>
+        <div class="kv"><label style="color:#ff5a5a">R</label><div class="slider sm track" id="advR" style="--trk:linear-gradient(90deg,#000,#f00)"><input type="range" min="0" max="255" value="255"><div class="thumb"></div></div><output id="advRV">255</output></div>
+        <div class="kv"><label style="color:#4be07a">V</label><div class="slider sm track" id="advG" style="--trk:linear-gradient(90deg,#000,#0f0)"><input type="range" min="0" max="255" value="0"><div class="thumb"></div></div><output id="advGV">0</output></div>
+        <div class="kv"><label style="color:#5a8aff">B</label><div class="slider sm track" id="advB" style="--trk:linear-gradient(90deg,#000,#00f)"><input type="range" min="0" max="255" value="0"><div class="thumb"></div></div><output id="advBV">0</output></div>
+      </details>
+      <div class="hexRow"><div class="prev" id="hexPrev"></div><input id="hexIn" maxlength="7" value="#FF0000" inputmode="text" spellcheck="false"><button class="pill" id="hexApply">OK</button></div>
+    </div>
+
+    <div class="card glass needs-conn">
+      <h2>Zones</h2>
+      <p class="hint" style="margin:0 0 12px">Le contrôleur a deux sorties pilotables séparément : <b>Symphonie</b> (bandes adressables, effets) et <b>RGB</b> (bandes simples). Utilise « Identifier » pour savoir quelles LED sont sur quelle sortie.</p>
+      <div class="hint" style="margin-bottom:6px">Les pages Couleur et Scènes pilotent :</div>
+      <div class="seg" id="targetSeg"><button data-t="dmx">Symphonie</button><button data-t="rgb">RGB</button><button data-t="sync">Les deux</button></div>
+      <div id="zones"></div>
+    </div>
+
+    <div class="card glass needs-conn">
+      <h2>Effet personnalisé</h2>
+      <p class="hint" style="margin:0 0 12px">Touche une case pour y mettre la couleur de la roue, touche-la à nouveau pour la vider.</p>
+      <div class="slots" id="slots"></div>
+      <div class="chipgrid" id="customStyles" style="margin-bottom:12px"></div>
+      <div class="row" style="gap:8px">
+        <div class="seg" id="customDir" style="flex:1"><button data-d="0" class="act">→ Avant</button><button data-d="1">← Arrière</button></div>
+        <button class="pill act" id="customPlay">Lancer</button>
+      </div>
+    </div>
+
+    <div class="card glass">
+      <h2>Réglages</h2>
+      <div class="setting"><div class="t"><b>Reconnexion automatique</b><span>Se reconnecte seul au contrôleur connu</span></div><button class="toggle" data-set="autoConnect"></button></div>
+      <div class="setting"><div class="t"><b>État au démarrage</b><span>Allume en rouge à 100 % à chaque connexion</span></div><button class="toggle" data-set="applyDefault"></button></div>
+      <div class="setting"><div class="t"><b>Vibrations</b><span>Retour haptique sur les boutons (si supporté)</span></div><button class="toggle" data-set="haptics"></button></div>
+      <div class="setting"><div class="t"><b>Déconnecter</b><span id="devName">—</span></div><button class="pill" id="disconnectBtn">Déconnecter</button></div>
+      <details><summary>Console développeur</summary>
+        <div class="saveRow" style="margin-top:10px"><input id="raw" placeholder="7B FF 04 01 FF FF FF FF BF" spellcheck="false" style="font-family:ui-monospace,Menlo,monospace;font-size:14px"><button class="pill" id="rawSend">Envoyer</button></div>
+        <div id="log"></div>
+      </details>
+    </div>
+  </section>
 </div>
 
-<div id="controls" class="dis">
-  <div class="card">
-    <h2>Alimentation</h2>
-    <div class="row">
-      <button data-power="1">Allumer</button>
-      <button data-power="0">Éteindre</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Couleur</h2>
-    <div class="row">
-      <input type="color" id="color" value="#ff0000">
-      <button class="sw" style="background:#ff0000" data-c="#ff0000"></button>
-      <button class="sw" style="background:#ff6a00" data-c="#ff6a00"></button>
-      <button class="sw" style="background:#ffffff" data-c="#ffffff"></button>
-      <button class="sw" style="background:#00ff00" data-c="#00ff00"></button>
-      <button class="sw" style="background:#00c8ff" data-c="#00c8ff"></button>
-      <button class="sw" style="background:#0000ff" data-c="#0000ff"></button>
-      <button class="sw" style="background:#a000ff" data-c="#a000ff"></button>
-      <button class="sw" style="background:#ff00a0" data-c="#ff00a0"></button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Luminosité</h2>
-    <div class="row"><input type="range" id="bri" min="1" max="100" value="100"><span class="val" id="briV">100%</span></div>
-  </div>
-
-  <div class="card">
-    <h2>Effets</h2>
-    <div class="row" style="margin-bottom:10px">
-      <button id="effPrev">◀</button>
-      <input type="number" id="eff" min="1" max="210" value="1" style="width:80px">
-      <button id="effNext">▶</button>
-      <button id="effSend">Lancer</button>
-      <button id="effAuto">Auto</button>
-    </div>
-    <div class="row"><span style="width:60px">Vitesse</span><input type="range" id="spd" min="1" max="100" value="50"><span class="val" id="spdV">50%</span></div>
-  </div>
-
-  <div class="card">
-    <h2>Musique (micro du boîtier) — 7B FF 0B n 00</h2>
-    <div class="row" style="margin-bottom:10px">
-      <button id="micPrev">◀</button>
-      <input type="number" id="mic" min="1" max="255" value="1" style="width:80px">
-      <button id="micNext">▶</button>
-      <button id="micSend">Lancer</button>
-    </div>
-    <div class="row" style="margin-bottom:10px"><span style="width:90px">Sensibilité</span><input type="range" id="sens" min="1" max="100" value="90"><span class="val" id="sensV">90%</span></div>
-    <h2 style="margin-top:14px">Musique zone RGB — 7E 00 0E n</h2>
-    <div class="row">
-      <button data-rgbmic="0">Saut</button><button data-rgbmic="1">Respiration</button>
-      <button data-rgbmic="2">Flash</button><button data-rgbmic="3">Dégradé</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Scènes favorites</h2>
-    <div class="row" style="margin-bottom:10px">
-      <input type="text" id="sceneName" placeholder="Nom de la scène" style="font-family:inherit">
-      <button id="sceneSave">Sauver l'état actuel</button>
-    </div>
-    <div class="row" id="scenes"></div>
-  </div>
-
-  <div class="card">
-    <h2>Trame brute (hex)</h2>
-    <div class="row"><input type="text" id="raw" placeholder="7B FF 04 01 FF FF FF FF BF"><button id="rawSend">Envoyer</button></div>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Journal</h2>
-  <div id="log"></div>
+<nav class="tabs glass" id="tabs">
+  <button data-tab="color" class="act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>Couleur</button>
+  <button data-tab="fx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18.5 9.4l-4.7 1.8L12 16l-1.8-4.8L5.5 9.4l4.7-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>Effets</button>
+  <button data-tab="music"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Musique</button>
+  <button data-tab="scenes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>Scènes</button>
+  <button data-tab="adv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>Avancé</button>
+</nav>
+<div class="toast glass" id="toast"></div>
+<div class="sheetBg" id="sheetBg"></div>
+<div class="sheet glass" id="sheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h3 id="sheetTitle">Choisir un favori</h3>
+  <p class="hint">Touche une ambiance pour l'épingler dans ce favori.</p>
+  <div class="sheetList" id="sheetList"></div>
 </div>
 
 <script>
-// UUID complets en texte (Bluefy n'accepte pas les UUID numériques courts type 0xffe0)
-const SERVICE = '0000ffe0-0000-1000-8000-00805f9b34fb';
-const CHAR_WRITE = '0000ffe1-0000-1000-8000-00805f9b34fb';
-const CHAR_NOTIFY = '0000fff4-0000-1000-8000-00805f9b34fb';
-const DEFAULT = { power: 1, color: '#ff0000', bri: 100 };
+'use strict';
+/* =====================================================================
+   Clio Ambient — contrôle du kit LED LEDCAR-01 (Web Bluetooth / Bluefy)
+   Protocole : trames de 9 octets sur FFE1 (voir protocole-ledcar-01.md)
+   ===================================================================== */
+const UUID = {
+  svc:    '0000ffe0-0000-1000-8000-00805f9b34fb',
+  write:  '0000ffe1-0000-1000-8000-00805f9b34fb',
+  notify: '0000fff4-0000-1000-8000-00805f9b34fb',
+};
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-let device = null, chWrite = null;
-// Dernier état envoyé (utilisé pour les scènes)
-const state = { color: DEFAULT.color, bri: DEFAULT.bri, mode: null, speed: 50, dir: 0 };
-
-const $ = id => document.getElementById(id);
-const hex = b => [...b].map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-function log(msg) { const l = $('log'); l.textContent += new Date().toLocaleTimeString() + '  ' + msg + '\n'; l.scrollTop = l.scrollHeight; }
-
-// --- Trames LEDCAR-01 (variante 7B … BF) ---
-const frame = (...b) => new Uint8Array([0x7B, ...b, 0xBF]);
-const cmd = {
-  power: on => frame(0xFF, 0x04, on ? 1 : 0, 0xFF, 0xFF, 0xFF, 0xFF),
-  color: (r, g, b, dir = 0) => frame(0x00, 0x07, r, g, b, dir, 0xFF),
-  bri: pct => frame(0xFF, 0x01, Math.round(pct * 32 / 100), pct, 0x00, 0xFF, 0xFF),
-  mode: id => frame(0xFF, 0x03, id, 0xFF, 0xFF, 0xFF, 0xFF),
-  speed: pct => frame(0xFF, 0x02, pct, 0xFF, 0x00, 0xFF, 0xFF),
-  dir: d => frame(0xFF, 0x0D, d, 0xFF, 0xFF, 0xFF, 0xFF), // n'agit que sur les modes « custom » (appli officielle)
-  // Source : décompilation de l'appli LED LAMP 4.3.7 (NetConnectBle.setCar01VoiceCtlMode / setSensitivity)
-  voice: n => frame(0xFF, 0x0B, n, 0x00, 0xFF, 0xFF, 0xFF),
-  sens: s => frame(0xFF, 0x0C, s, 0x00, 0xFF, 0xFF, 0xFF),
-  voiceRgb: n => new Uint8Array([0x7E, 0x00, 0x0E, n, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF]),
-  sensRgb: s => new Uint8Array([0x7E, 0xFF, 0x07, s, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF]),
+/* ---------------- Trames ---------------- */
+const F7B = (...b) => Uint8Array.of(0x7B, ...b, 0xBF);   // famille « Symphonie / DMX »
+const F7E = (...b) => Uint8Array.of(0x7E, ...b, 0xEF);   // famille « RGB »
+const sc = p => Math.round(p * 32 / 100);
+const P = {
+  power: (on, z) => z === 'rgb' ? F7E(0xFF, 4, on ? 1 : 0, 255, 255, 255, 255)
+                  : z === 'sync' ? F7B(0xFF, 4, on ? 7 : 6, 255, 255, 255, 255)
+                  : F7B(0xFF, 4, on ? 1 : 0, 255, 255, 255, 255),
+  color: (r, g, b, z) => z === 'rgb' ? F7E(0xFF, 5, 3, r, g, b, 0xFF)
+                       : z === 'sync' ? F7B(1, 7, r, g, b, 0, 0xFF)
+                       : F7B(0, 7, r, g, b, 0, 0xFF),
+  bri: (p, z) => z === 'rgb' ? F7E(0xFF, 1, p, 0, 255, 255, 255)
+              : z === 'sync' ? F7B(0xFF, 1, sc(p), p, 2, 255, 255)
+              : F7B(0xFF, 1, sc(p), p, 0, 255, 255),
+  effect: id => F7B(0xFF, 3, id, 255, 255, 255, 255),
+  speed: p => F7B(0xFF, 2, p, 0xFF, 0, 255, 255),
+  dir: d => F7B(0xFF, 0x0D, d, 255, 255, 255, 255),
+  voice: n => F7B(0xFF, 0x0B, n, 0, 255, 255, 255),
+  sens: s => F7B(0xFF, 0x0C, s, 0, 255, 255, 255),
+  voiceRgb: n => F7E(0, 0x0E, n, 255, 255, 255, 255),
+  sensRgb: s => F7E(0xFF, 7, s, 255, 255, 255, 255),
+  customColor: (i, r, g, b, n) => F7B(i, 0x0E, 253, r, g, b, n),
+  customMode: s => F7B(0xFF, 0x13, s, 255, 255, 255, 255),
 };
 
-// --- File d'envoi : une écriture GATT à la fois ---
-let queue = Promise.resolve();
-function send(bytes) {
-  if (!chWrite) { log('⚠ pas connecté'); return queue; }
-  queue = queue.then(async () => {
+/* ---------------- État persistant ---------------- */
+const DEFAULT_STATE = {
+  on: true, hex: '#ff0000', h: 0, s: 100, bri: 100,
+  mode: 'color', effect: null, speed: 50, micMode: 1, sens: 90,
+  target: 'dmx',
+  zones: { dmx: { on: true, hex: '#ff0000', bri: 100 }, rgb: { on: true, hex: '#0050ff', bri: 100 } },
+  custom: { slots: ['#ff0000', '#0050ff', null, null, null, null, null, null], style: 0, dir: 0 },
+  settings: { autoConnect: true, applyDefault: true, haptics: true },
+};
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const S = Object.assign(structuredClone(DEFAULT_STATE), load('ca.state', {}));
+S.settings = Object.assign({}, DEFAULT_STATE.settings, S.settings);
+S.zones = Object.assign({}, DEFAULT_STATE.zones, S.zones);
+S.custom = Object.assign({}, DEFAULT_STATE.custom, S.custom);
+let persistT; const persist = () => { clearTimeout(persistT); persistT = setTimeout(() => save('ca.state', S), 250); };
+
+/* ---------------- Couleurs utilitaires ---------------- */
+function hsv2rgb(h, s, v) { s /= 100; v /= 100; const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); }; return [f(5), f(3), f(1)].map(x => Math.round(x * 255)); }
+function rgb2hsv(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0;
+  if (d) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h = Math.round(h * 60 + 360) % 360;
+  return [h, mx ? Math.round(d / mx * 100) : 0, Math.round(mx * 100)]; }
+const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const rgb2hex = (r, g, b) => '#' + [r, g, b].map(x => clamp(x, 0, 255).toString(16).padStart(2, '0')).join('');
+function kelvin2rgb(k) { const t = k / 100; let r, g, b;
+  r = t <= 66 ? 255 : 329.698727446 * Math.pow(t - 60, -0.1332047592);
+  g = t <= 66 ? 99.4708025861 * Math.log(t) - 161.1195681661 : 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+  b = t >= 66 ? 255 : t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  return [r, g, b].map(x => Math.round(clamp(x, 0, 255))); }
+function colorName(h, s) {
+  if (s < 12) return 'Blanc';
+  const n = [[15,'Rouge'],[40,'Orange'],[65,'Ambre'],[80,'Jaune'],[150,'Vert'],[175,'Menthe'],[200,'Cyan'],[230,'Azur'],[255,'Bleu'],[280,'Indigo'],[305,'Violet'],[335,'Magenta'],[361,'Rouge']];
+  return n.find(([m]) => h < m)[1];
+}
+
+/* ---------------- Bluetooth ---------------- */
+let device = null, chWrite = null, manualDisconnect = false, retries = 0;
+const pending = new Map(); let pumping = false;
+function send(key, bytes) {
+  if (bytes.length !== 9) return log('✖ trame invalide ' + key);
+  pending.delete(key); pending.set(key, bytes);
+  pump();
+}
+async function pump() {
+  if (pumping) return; pumping = true;
+  while (pending.size && chWrite) {
+    const [k, b] = pending.entries().next().value; pending.delete(k);
     try {
-      if (chWrite.writeValueWithoutResponse) await chWrite.writeValueWithoutResponse(bytes);
-      else await chWrite.writeValue(bytes);
-      log('→ ' + hex(bytes));
+      if (chWrite.writeValueWithoutResponse) await chWrite.writeValueWithoutResponse(b); else await chWrite.writeValue(b);
+      log('→ ' + hex(b));
+      await new Promise(r => setTimeout(r, 12));
     } catch (e) { log('✖ ' + e.message); }
-  });
-  return queue;
+  }
+  if (!chWrite) pending.clear();
+  pumping = false;
 }
-// Limite le débit pour les sliders / color picker (dernière valeur gagne)
-function throttle(fn, ms = 60) {
-  let t = null, last = null;
-  return (...a) => { last = a; if (t) return; t = setTimeout(() => { t = null; fn(...last); }, ms); };
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('délai dépassé')), ms))]);
+
+function setConn(mode, text) {
+  $('#dot').className = 'dot' + (mode === 'on' ? ' on' : mode === 'busy' ? ' busy' : '');
+  $('#statusTxt').textContent = text;
+  document.body.classList.toggle('offline', mode !== 'on');
+  $('#connectCard').style.display = mode === 'on' ? 'none' : '';
 }
-
-const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
-function setColor(h) { state.color = h; state.mode = null; $('color').value = h; send(cmd.color(...hexToRgb(h), state.dir)); }
-function setBri(p) { state.bri = p; $('bri').value = p; $('briV').textContent = p + '%'; send(cmd.bri(p)); }
-function setMode(id) { state.mode = id; send(cmd.mode(id)); }
-function setSpeed(p) { state.speed = p; $('spd').value = p; $('spdV').textContent = p + '%'; send(cmd.speed(p)); }
-
-// --- Connexion ---
-async function connect() {
-  if (!navigator.bluetooth) { log('✖ Web Bluetooth indisponible (utilise Chrome/Edge sur PC, Bluefy sur iPhone)'); return; }
+async function connect(dev) {
+  if (!navigator.bluetooth) { toast('Bluetooth web indisponible — ouvre la page dans Bluefy'); return; }
   try {
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ namePrefix: 'LEDCAR' }],
-      optionalServices: [SERVICE],
-    });
-    device.addEventListener('gattserverdisconnected', onDisconnected);
-    $('status').textContent = 'Connexion…';
-    const server = await device.gatt.connect();
-    const svc = await server.getPrimaryService(SERVICE);
-    chWrite = await svc.getCharacteristic(CHAR_WRITE);
-    try {
-      const chN = await svc.getCharacteristic(CHAR_NOTIFY);
-      await chN.startNotifications();
-      chN.addEventListener('characteristicvaluechanged', e => log('← ' + hex(new Uint8Array(e.target.value.buffer))));
-    } catch (e) { log('(notify FFF4 indisponible : ' + e.message + ')'); }
-
-    $('status').textContent = 'Connecté · ' + device.name; $('status').className = 'ok';
-    $('btnConnect').disabled = true; $('btnDisconnect').disabled = false;
-    $('controls').classList.remove('dis');
+    if (!dev) dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'LEDCAR' }], optionalServices: [UUID.svc] });
+    if (device !== dev) { device = dev; device.addEventListener('gattserverdisconnected', onDisconnected); }
+    manualDisconnect = false;
+    setConn('busy', 'Connexion…');
+    const server = await withTimeout(device.gatt.connect(), 10000);
+    const svc = await server.getPrimaryService(UUID.svc);
+    chWrite = await svc.getCharacteristic(UUID.write);
+    try { const n = await svc.getCharacteristic(UUID.notify); await n.startNotifications();
+      n.addEventListener('characteristicvaluechanged', e => log('← ' + hex(new Uint8Array(e.target.value.buffer)))); } catch {}
+    retries = 0;
+    setConn('on', device.name || 'Connecté');
+    $('#devName').textContent = device.name || '—';
     log('Connecté à ' + device.name);
-
-    // État par défaut : allumé, rouge, 100 %
-    send(cmd.power(1)); setColor(DEFAULT.color); setBri(DEFAULT.bri);
-  } catch (e) { log('✖ ' + e.name + ' : ' + e.message); $('status').textContent = 'Déconnecté'; }
+    haptic();
+    if (S.settings.applyDefault) { S.on = true; S.mode = 'color'; applyColor('#ff0000', { send: false }); S.bri = 100; renderAll(); }
+    resendState();
+  } catch (e) {
+    if (e.name === 'NotFoundError') { setConn('off', 'Déconnecté'); return; }
+    log('✖ ' + e.name + ' : ' + e.message);
+    setConn('off', 'Déconnecté');
+    toast('Connexion impossible : ' + e.message);
+  }
 }
 function onDisconnected() {
-  chWrite = null; $('status').textContent = 'Déconnecté'; $('status').className = '';
-  $('btnConnect').disabled = false; $('btnDisconnect').disabled = true;
-  $('controls').classList.add('dis'); log('Déconnecté');
+  chWrite = null; setConn('off', 'Déconnecté'); log('Déconnecté');
+  if (!manualDisconnect && device && retries < 4) {
+    retries++; setConn('busy', 'Reconnexion…');
+    setTimeout(() => connect(device), 800 * retries);
+  }
 }
-$('btnConnect').onclick = connect;
-$('btnDisconnect').onclick = () => device?.gatt.connected && device.gatt.disconnect();
+async function tryAutoConnect() {
+  if (!S.settings.autoConnect || !navigator.bluetooth?.getDevices) return;
+  try {
+    const devs = await navigator.bluetooth.getDevices();
+    const d = devs.find(x => (x.name || '').startsWith('LEDCAR'));
+    if (d) { $('#connectHint').textContent = 'Recherche de ' + d.name + '…'; await connect(d); }
+  } catch (e) { log('auto : ' + e.message); }
+}
+function resendState() {
+  send('power', P.power(S.on, S.target));
+  if (S.mode === 'effect' && S.effect != null) { send('effect', P.effect(S.effect)); send('speed', P.speed(S.speed)); }
+  else if (S.mode === 'music') send('voice', P.voice(S.micMode));
+  else send('color', P.color(...hex2rgb(S.hex), S.target));
+  send('bri', P.bri(S.bri, S.target));
+}
 
-// --- Contrôles ---
-document.querySelectorAll('[data-power]').forEach(b => b.onclick = () => send(cmd.power(+b.dataset.power)));
-document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => setColor(b.dataset.c));
-$('color').addEventListener('input', throttle(e => setColor(e.target.value)));
-$('bri').addEventListener('input', throttle(e => setBri(+e.target.value)));
-$('spd').addEventListener('input', throttle(e => setSpeed(+e.target.value)));
-const clampEff = v => Math.min(210, Math.max(1, v));
-$('effSend').onclick = () => setMode(clampEff(+$('eff').value));
-$('effPrev').onclick = () => { $('eff').value = clampEff(+$('eff').value - 1); setMode(+$('eff').value); };
-$('effNext').onclick = () => { $('eff').value = clampEff(+$('eff').value + 1); setMode(+$('eff').value); };
-$('effAuto').onclick = () => setMode(0xFF);
-const clampMic = v => Math.min(255, Math.max(1, v));
-const setVoice = n => { $('mic').value = n; state.mode = null; send(cmd.voice(n)); };
-$('micSend').onclick = () => setVoice(clampMic(+$('mic').value));
-$('micPrev').onclick = () => setVoice(clampMic(+$('mic').value - 1));
-$('micNext').onclick = () => setVoice(clampMic(+$('mic').value + 1));
-$('sens').addEventListener('input', throttle(e => {
-  const s = +e.target.value; $('sensV').textContent = s + '%';
-  send(cmd.sens(s)); send(cmd.sensRgb(s));
-}, 120));
-document.querySelectorAll('[data-rgbmic]').forEach(b => b.onclick = () => send(cmd.voiceRgb(+b.dataset.rgbmic)));
-$('rawSend').onclick = () => {
-  const bytes = ($('raw').value.match(/[0-9a-f]{2}/gi) || []).map(x => parseInt(x, 16));
-  if (bytes.length) send(new Uint8Array(bytes)); else log('✖ trame vide');
-};
+/* ---------------- Retours UI ---------------- */
+function haptic() { if (S.settings.haptics && navigator.vibrate) try { navigator.vibrate(8); } catch {} }
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+function log(msg) { const l = $('#log'); if (!l) return; l.textContent += new Date().toLocaleTimeString() + '  ' + msg + '\n'; if (l.textContent.length > 20000) l.textContent = l.textContent.slice(-15000); l.scrollTop = l.scrollHeight; }
 
-// --- Scènes (localStorage) ---
-const KEY = 'ledcar.scenes';
-const loadScenes = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-const saveScenes = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+/* ---------------- Slider générique ---------------- */
+function slider(el, { value, fmt = v => v + '%', onInput, onChange }) {
+  const input = el.querySelector('input'), val = el.querySelector('.val');
+  const min = +input.min, max = +input.max;
+  const paint = v => { el.style.setProperty('--p', (v - min) / (max - min) * 100); if (val) val.textContent = fmt(v); };
+  input.addEventListener('input', () => { paint(+input.value); onInput && onInput(+input.value); });
+  input.addEventListener('change', () => { onChange && onChange(+input.value); haptic(); });
+  const api = { set(v) { input.value = v; paint(+v); } };
+  api.set(value); return api;
+}
+
+/* ---------------- Couleur ---------------- */
+function applyColor(hx, { send: doSend = true, keepHS } = {}) {
+  hx = hx.toLowerCase(); S.hex = hx;
+  if (!keepHS) { const [h, s] = rgb2hsv(...hex2rgb(hx)); if (s > 3) S.h = h; S.s = s; }
+  S.mode = 'color';
+  if (doSend) { send('color', P.color(...hex2rgb(hx), S.target)); if (!S.on) setPower(true); }
+  paintColor(); persist();
+}
+function paintColor() {
+  const root = document.documentElement.style;
+  const display = S.mode === 'color' ? S.hex : S.mode === 'music' ? '#b34bff' : S.mode === 'custom' ? (S.custom.slots.find(Boolean) || S.hex) : effectGlow();
+  root.setProperty('--glow', display);
+  $('#musicCard').classList.toggle('music-on', S.mode === 'music');
+  root.setProperty('--glowA', S.on ? (0.25 + 0.45 * S.bri / 100).toFixed(2) : '0.08');
+  // anneau
+  const ring = $('#ring').getBoundingClientRect(), wrap = $('.ringWrap').getBoundingClientRect();
+  const R = ring.width / 2 * 0.865, a = (S.h - 90) * Math.PI / 180;
+  const k = $('#ringKnob');
+  k.style.left = (ring.left - wrap.left + ring.width / 2 + R * Math.cos(a)) + 'px';
+  k.style.top = (ring.top - wrap.top + ring.height / 2 + R * Math.sin(a)) + 'px';
+  k.style.background = rgb2hex(...hsv2rgb(S.h, 100, 100));
+  $('#colorName').firstChild.nodeValue = colorName(S.h, S.s);
+  $('#colorHex').textContent = S.hex.toUpperCase();
+  $$('#quickColors .sw').forEach(b => b.classList.toggle('sel', b.dataset.c === S.hex));
+  // avancé
+  const w = $('#wheel').getBoundingClientRect(), wr = w.width / 2, wa = S.h * Math.PI / 180;
+  const wk = $('#wheelKnob'); wk.style.left = (wr + wr * S.s / 100 * Math.cos(wa)) + 'px'; wk.style.top = (wr - wr * S.s / 100 * Math.sin(wa)) + 'px';
+  wk.style.background = S.hex;
+  $('#wheelDim').style.opacity = ((100 - S.bri) / 100 * 0.7).toFixed(2);
+  adv.hue.set(S.h); $('#advHueV').textContent = S.h + '°';
+  adv.sat.set(S.s); $('#advSatV').textContent = S.s + '%';
+  $('#advSat').style.setProperty('--trk', `linear-gradient(90deg,#fff,${rgb2hex(...hsv2rgb(S.h, 100, 100))})`);
+  const [r, g, b] = hex2rgb(S.hex);
+  adv.r.set(r); adv.g.set(g); adv.b.set(b); $('#advRV').textContent = r; $('#advGV').textContent = g; $('#advBV').textContent = b;
+  $('#hexPrev').style.background = S.hex;
+  if (document.activeElement !== $('#hexIn')) $('#hexIn').value = S.hex.toUpperCase();
+}
+function setHS(h, s, doSend = true) { S.h = Math.round((h + 360) % 360); S.s = Math.round(clamp(s, 0, 100)); applyColor(rgb2hex(...hsv2rgb(S.h, S.s, 100)), { send: doSend, keepHS: true }); }
+function setBri(p, doSend = true) { S.bri = clamp(Math.round(p), 1, 100); if (doSend) { send('bri', P.bri(S.bri, S.target)); if (!S.on) setPower(true); } briMain.set(S.bri); adv.bri.set(S.bri); $('#advBriV').textContent = S.bri + '%'; paintColor(); persist(); }
+function setPower(on) { S.on = on; send('power', P.power(on, S.target)); $('#powerBtn').classList.toggle('on', on); paintColor(); persist(); haptic(); }
+
+function pointerDrag(el, cb) {
+  let active = false;
+  const handle = e => { const r = el.getBoundingClientRect(); cb(e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2, r.width / 2); };
+  el.addEventListener('pointerdown', e => { active = true; el.setPointerCapture(e.pointerId); el.parentElement.classList.add('dragging'); handle(e); });
+  el.addEventListener('pointermove', e => active && handle(e));
+  const end = () => { if (active) { active = false; el.parentElement.classList.remove('dragging'); haptic(); } };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+
+/* ---------------- Effets : catalogue ---------------- */
+const RAW_FX = [[255,"Auto (cycle through effects)"],[1,"Forward Dreaming"],[2,"Backward Dreaming"],[3,"Forward 7 Colors"],[4,"Backward 7 Colors"],[5,"Forward RD/GN/BU"],[6,"Backward RD/GN/BU"],[7,"Forward YE/CN/VT"],[8,"Backward YE/CN/VT"],[9,"Forward 6 Colors RD"],[10,"Backward 6 Colors RD"],[11,"Forward 6 Colors GN"],[12,"Backward 6 Colors GN"],[13,"Forward 6 Colors BU"],[14,"Backward 6 Colors BU"],[15,"Forward 6 Colors CN"],[16,"Backward 6 Colors CN"],[17,"Forward 6 Colors YE"],[18,"Backward 6 Colors YE"],[19,"Forward 6 Colors VT"],[20,"Backward 6 Colors VT"],[21,"Forward 6 Colors WH"],[22,"Backward 6 Colors WH"],[23,"Forward Trailing 7 Colors"],[24,"Backward Trailing 7 Colors"],[25,"Forward Trailing RD"],[26,"Backward Trailing RD"],[27,"Forward Trailing GN"],[28,"Backward Trailing GN"],[29,"Forward Trailing BU"],[30,"Backward Trailing BU"],[31,"Forward Trailing YE"],[32,"Backward Trailing YE"],[33,"Forward Trailing CN"],[34,"Backward Trailing CN"],[35,"Forward Trailing VT"],[36,"Backward Trailing VT"],[37,"Forward Trailing WH"],[38,"Backward Trailing WH"],[39,"Forward Streaming 7 Colors"],[40,"Backward Streaming 7 Colors"],[41,"Forward Streaming RD/GN/BU"],[42,"Backward Streaming RD/GN/BU"],[43,"Forward Streaming YE/CN/VT"],[44,"Backward Streaming YE/CN/VT"],[45,"Forward Streaming RD/GN"],[46,"Backward Streaming RD/GN"],[47,"Forward Streaming GN/BU"],[48,"Backward Streaming GN/BU"],[49,"Forward Streaming YE/BU"],[50,"Backward Streaming YE/BU"],[51,"Forward Streaming YE/CN"],[52,"Backward Streaming YE/CN"],[53,"Forward Streaming CN/VT"],[54,"Backward Streaming CN/VT"],[55,"Forward Streaming BK/WH"],[56,"Backward Streaming BK/WH"],[57,"Open Curtain 7 Colors"],[58,"Close Curtain 7 Colors"],[59,"Open Curtain RD/GN/BU"],[60,"Close Curtain RD/GN/BU"],[61,"Open Curtain YE/CN/VT"],[62,"Close Curtain YE/CN/VT"],[63,"Forward Follow Spot 7 Colors"],[64,"Backward Follow Spot 7 Colors"],[65,"Forward Follow Spot RD/GN/BU"],[66,"Backward Follow Spot RD/GN/BU"],[67,"Forward Follow Spot YE/CN/VT"],[68,"Backward Follow Spot YE/CN/VT"],[69,"Forward Flutter 7 Colors"],[70,"Backward Flutter 7 Colors"],[71,"Forward Flutter RD/GN/BU"],[72,"Backward Flutter RD/GN/BU"],[73,"Forward Flutter YE/CN/VT"],[74,"Backward Flutter YE/CN/VT"],[75,"Hop 7 Colors"],[76,"Hop RD/GN/BU"],[77,"Hop RD/GN/BU"],[78,"Strobe 7 Colors"],[79,"Strobe RD/GN/BU"],[80,"Strobe YE/CN/VT"],[81,"Gradual 7 Colors"],[82,"Gradual RD/E"],[83,"Gradual RD/VT"],[84,"Gradual GN/CN"],[85,"Gradual GN/YE"],[86,"Gradual BU/VT"],[87,"Close Curtain RD"],[88,"Close Curtain GN"],[89,"Close Curtain BU"],[90,"Close Curtain YE"],[91,"Close Curtain CN"],[92,"Close Curtain VT"],[93,"Close Curtain WH"],[94,"Open Curtain RD"],[95,"Open Curtain GN"],[96,"Open Curtain BU"],[97,"Open Curtain YE"],[98,"Open Curtain CN"],[99,"Open Curtain VT"],[100,"Open Curtain WH"],[101,"Horse Race RD"],[102,"Horse Race GN"],[103,"Horse Race BU"],[104,"Horse Race YE"],[105,"Horse Race CN"],[106,"Horse Race VT"],[107,"Horse Race WH"],[108,"Forward Run RD"],[109,"Backward Run RD"],[110,"Forward Run GN"],[111,"Backward Run GN"],[112,"Forward Run BU"],[113,"Backward Run BU"],[114,"Forward Run YE"],[115,"Backward Run YE"],[116,"Forward Run CN"],[117,"Backward Run CN"],[118,"Forward Run VT"],[119,"Backward Run VT"],[120,"Forward Run WH"],[121,"Backward Run WH"],[122,"Forward Run 7 Colors"],[123,"Backward Run 7 Colors"],[124,"Forward Run RD/GN/BU"],[125,"Backward Run RD/GN/BU"],[126,"Forward Run YE/CN/VT"],[127,"Backward Run YE/CN/VT"],[128,"Forward Run BU/YE/VT"],[129,"Forward Run GN/BU/YE"],[130,"Backward Run BU/YE/VT"],[131,"Forward Run RD/ON/WH"],[132,"Backward Run RD/ON/WH"],[133,"Forward Run GN ON RD"],[134,"Backward Run GN ON RD"],[135,"Forward Run BU ON GN"],[136,"Backward Run BU ON GN"],[137,"Forward Run YE ON BU"],[138,"Backward Run YE ON BU"],[139,"Forward Run CN ON YE"],[140,"Backward Run CN ON YE"],[141,"Forward Run VT ON CN"],[142,"Backward Run VT ON CN"],[143,"Forward Run WH ON VT"],[144,"Backward Run WH ON VT"],[145,"Forward Run WH ON RD"],[146,"Backward Run WH ON RD"],[147,"Forward Run 7 COLOR ON RD"],[148,"Backward Run 7 COLOR ON RD"],[149,"Forward Run 7 COLOR ON GN"],[150,"Backward Run 7 COLOR ON GN"],[151,"Forward Run 7 COLOR ON BU"],[152,"Backward Run 7 COLOR ON BU"],[153,"Forward Run 7 COLOR ON YE"],[154,"Backward Run 7 COLOR ON YE"],[155,"Forward Run 7 COLOR ON CN"],[156,"Backward Run 7 COLOR ON CN"],[157,"Forward Run 7 COLOR ON VT"],[158,"Backward Run 7 COLOR ON VT"],[159,"Forward Run 7 COLOR ON WH"],[160,"Backward Run 7 COLOR ON WH"],[161,"Forward Flow WH RD WH"],[162,"Backward Flow WH RD WH"],[163,"Forward Flow WH GN WH"],[164,"Backward Flow WH GN WH"],[165,"Forward Flow WH BU WH"],[166,"Backward Flow WH BU WH"],[167,"Forward Flow WH YE WH"],[168,"Backward Flow WH YE WH"],[169,"Forward Flow WH CN WH"],[170,"Backward Flow WH CN WH"],[171,"Forward Flow WH VT WH"],[172,"Backward Flow WH VT WH"],[173,"Forward Flow RD WH RD"],[174,"Backward Flow RD WH RD"],[175,"Forward Flow GN WH GN"],[176,"Backward Flow GN WH GN"],[177,"Forward Flow BU WH BU"],[178,"Backward Flow BU WH BU"],[179,"Forward Flow YE WH YE"],[180,"Backward Flow YE WH YE"],[181,"Forward Flow CN WH CN"],[182,"Backward Flow CN WH CN"],[183,"Forward Flow VT WH VT"],[184,"Backward Flow VT WH VT"],[185,"Forward Run GN ON BU"],[186,"Backward Run GN ON BU"],[187,"Forward Run GN ON RD"],[188,"Backward Run GN ON RD"],[189,"Forward Run RD ON BU"],[190,"Backward Run RD ON BU"],[191,"Forward Run CN ON YE"],[192,"Backward Run CN ON YE"],[193,"Forward Run YE ON VT"],[194,"Backward Run YE ON VT"],[195,"Forward Run WH ON YE"],[196,"Backward Run WH ON YE"],[197,"Forward Run YE ON WH"],[198,"Backward Run YE ON WH"],[199,"Forward Swab 7 COLORS"],[200,"Backward Swab 7 COLORS"],[201,"Forward Swab RD GN BU"],[202,"Backward Swab RD GN BU"],[203,"Forward Swab YE CN VT"],[204,"Backward Swab YE CN VT"],[205,"Open Curtain Swab 7 COLORS"],[206,"Close Curtain Swab 7 COLORS"],[207,"Open Curtain Swab R G B"],[208,"Close Curtain Swab R G B"],[209,"Open Curtain Swab Y C P"],[210,"Close Curtain Swab Y C P"]];
+const COL = { RD: '#ff2a2a', GN: '#22e04a', BU: '#2a5bff', YE: '#ffd21f', CN: '#1fe0ff', VT: '#a23bff', WH: '#ffffff', BK: '#0b0b0b', ON: '#ff7a00', E: '#ff2a2a', R: '#ff2a2a', G: '#22e04a', B: '#2a5bff', Y: '#ffd21f', C: '#1fe0ff', P: '#a23bff' };
+const FRC = { RD: 'rouge', GN: 'vert', BU: 'bleu', YE: 'jaune', CN: 'cyan', VT: 'violet', WH: 'blanc', BK: 'noir', ON: 'orange', E: '', R: 'rouge', G: 'vert', B: 'bleu', Y: 'jaune', C: 'cyan', P: 'violet' };
+const RAINBOW = ['#ff2a2a', '#ff8a00', '#ffd21f', '#22e04a', '#1fe0ff', '#2a5bff', '#a23bff'];
+const FAMILIES = [
+  ['Curtain Swab', 'Rideau balayé', 'Rideau'], ['Curtain', 'Rideau', 'Rideau'], ['Follow Spot', 'Poursuite', 'Poursuite'],
+  ['Horse Race', 'Course', 'Course'], ['Trailing', 'Traînée', 'Traînée'], ['Streaming', 'Flux', 'Flux'],
+  ['Flutter', 'Scintillement', 'Scintillement'], ['Swab', 'Balayage', 'Balayage'], ['Flow', 'Vague', 'Vague'],
+  ['Run', 'Défilement', 'Défilement'], ['Hop', 'Saut', 'Flash'], ['Strobe', 'Stroboscope', 'Flash'],
+  ['Gradual', 'Fondu', 'Fondu'], ['Dreaming', 'Rêve', 'Couleurs'], ['6 Colors', '6 couleurs', 'Couleurs'], ['7 Colors', '7 couleurs', 'Couleurs'],
+];
+const DIRLBL = { fwd: '→ Avant', bwd: '← Arrière', open: 'Ouvrir', close: 'Fermer' };
+function buildGroups() {
+  const groups = new Map();
+  for (const [id, name] of RAW_FX) {
+    if (id === 255) continue;
+    let rest = name, dir = null;
+    const m = rest.match(/^(Forward|Backward|Open|Close) (.*)$/);
+    if (m) { dir = { Forward: 'fwd', Backward: 'bwd', Open: 'open', Close: 'close' }[m[1]]; rest = m[2]; }
+    const fam = FAMILIES.find(([en]) => rest === en || rest.startsWith(en + ' ')) || ['', 'Chenillard', 'Couleurs'];
+    const colorPart = rest.slice(fam[0].length).trim();
+    let palette, label;
+    if (/7 COLOR/i.test(colorPart) || (!colorPart && (fam[0] === 'Dreaming' || fam[0] === '7 Colors'))) {
+      const bg = colorPart.match(/ ON (\w+)$/i);
+      palette = bg ? [COL[bg[1].toUpperCase()], ...RAINBOW, COL[bg[1].toUpperCase()]] : RAINBOW;
+      label = /7 COLOR/i.test(colorPart) ? '7 couleurs' + (bg ? ' sur ' + FRC[bg[1].toUpperCase()] : '') : '';
+    } else if (/ ON /.test(colorPart)) {
+      const [a, b] = colorPart.split(' ON ').map(x => x.trim().toUpperCase());
+      palette = [COL[b], COL[a], COL[b], COL[b]]; label = FRC[a] + ' sur ' + FRC[b];
+    } else if (colorPart) {
+      const t = colorPart.toUpperCase().split(/[\/ ]+/).filter(x => COL[x]);
+      palette = t.map(x => COL[x]); label = t.map(x => FRC[x]).filter(Boolean).join(' · ');
+      if (fam[0] === '6 Colors') palette = [COL[t[0]], ...RAINBOW.slice(0, 5)];
+    } else palette = RAINBOW;
+    if (palette.length === 1) palette = [palette[0], '#000', palette[0], '#000'];
+    let key = fam[0] + '|' + colorPart.toUpperCase();
+    let g = groups.get(key);
+    while (g && dir && g.ids[dir] != null) { key += '+'; g = groups.get(key); }
+    if (!g) { g = { key, title: fam[1] + (label ? ' ' + label : ''), cat: fam[2], palette, ids: {}, en: '' }; groups.set(key, g); }
+    g.ids[dir || 'one'] = id; g.en += ' ' + name.toLowerCase();
+  }
+  const list = [...groups.values()];
+  list.forEach(g => { g.dirs = Object.keys(g.ids); g.search = (g.title + ' ' + g.cat + ' ' + g.en).toLowerCase(); });
+  return list;
+}
+const FX = buildGroups();
+const fxById = new Map(); FX.forEach(g => Object.entries(g.ids).forEach(([d, id]) => fxById.set(id, [g, d])));
+let fxCat = 'Tous';
+function effectGlow() { const r = fxById.get(S.effect); return r ? r[0].palette[Math.min(1, r[0].palette.length - 1)] : '#ff8a00'; }
+function renderFxCats() {
+  const cats = ['Tous', ...new Set(FX.map(g => g.cat))];
+  $('#fxCats').innerHTML = cats.map(c => `<button class="chip${c === fxCat ? ' act' : ''}" data-cat="${c}">${c}</button>`).join('');
+  updateFades($('#fxCats'));
+}
+function renderFx() {
+  const q = $('#fxSearch').value.trim().toLowerCase();
+  const items = FX.filter(g => (fxCat === 'Tous' || g.cat === fxCat) && (!q || q.split(/\s+/).every(w => g.search.includes(w))));
+  const cur = fxById.get(S.effect)?.[0];
+  $('#fxList').innerHTML = items.length ? items.map(g => {
+    const pal = g.palette.join(','), dirNow = cur === g ? fxById.get(S.effect)[1] : g.dirs[0];
+    const cls = g.cat === 'Flash' ? 'blink' : (dirNow === 'bwd' || dirNow === 'close' ? 'rev' : '');
+    return `<button class="fx${cur === g ? ' act' : ''}" data-key="${g.key}"><div class="pv ${cls}" style="background-image:linear-gradient(90deg,${pal},${g.palette[0]})"></div><b>${g.title}</b><span>${g.cat}${g.dirs.length > 1 ? ' · 2 sens' : ''}</span></button>`;
+  }).join('') : '<div class="empty">Aucun effet trouvé</div>';
+}
+function playEffect(id) {
+  S.effect = id; S.mode = 'effect';
+  send('effect', P.effect(id)); send('speed', P.speed(S.speed)); if (!S.on) setPower(true);
+  renderNow(); renderFx(); paintColor(); persist(); haptic();
+}
+function renderNow() {
+  const r = fxById.get(S.effect);
+  $('#nowName').textContent = S.effect === 255 ? 'Auto — tous les effets' : r ? r[0].title : 'Aucun effet';
+  $('#fxAuto').classList.toggle('act', S.effect === 255);
+  const seg = $('#fxDir');
+  if (r && r[0].dirs.length > 1) {
+    seg.style.display = ''; seg.innerHTML = r[0].dirs.map(d => `<button data-d="${d}" class="${d === r[1] ? 'act' : ''}">${DIRLBL[d] || d}</button>`).join('');
+  } else seg.style.display = 'none';
+}
+
+/* ---------------- Musique ---------------- */
+function setMic(n) {
+  S.micMode = clamp(n, 1, 255); S.mode = 'music';
+  $('#micNum').textContent = S.micMode;
+  send('voice', P.voice(S.micMode)); if (!S.on) setPower(true);
+  $$('#micChips .chip').forEach(c => c.classList.toggle('act', +c.dataset.m === S.micMode));
+  $('#musicCard').classList.add('music-on'); paintColor(); persist(); haptic();
+}
+
+/* ---------------- Scènes ---------------- */
+// type : color (couleur fixe) | custom (dégradé de 2-4 couleurs via l'effet personnalisé) | effect (effet intégré) | music
+const SUGGESTIONS = [
+  // Couleurs unies
+  { id: 's-rouge', cat: 'Unies', name: 'Rouge sport', mode: 'color', hex: '#ff0000', bri: 100, grad: ['#ff4b4b', '#c00000', '#5a0000'] },
+  { id: 's-nuit', cat: 'Unies', name: 'Nuit bleue', mode: 'color', hex: '#1a3cff', bri: 45, grad: ['#4d74ff', '#1a3cff', '#060f55'] },
+  { id: 's-violet', cat: 'Unies', name: 'Violet lounge', mode: 'color', hex: '#8a2be2', bri: 60, grad: ['#c07bff', '#8a2be2', '#3a0d6b'] },
+  { id: 's-chaud', cat: 'Unies', name: 'Blanc chaud', mode: 'color', hex: '#ffb46b', bri: 70, grad: ['#ffe2c2', '#ffb46b', '#8a4f1c'] },
+  { id: 's-ambre', cat: 'Unies', name: 'Ambre rétro', mode: 'color', hex: '#ff7a00', bri: 55, grad: ['#ffc06b', '#ff7a00', '#7a2f00'] },
+  { id: 's-menthe', cat: 'Unies', name: 'Menthe glacée', mode: 'color', hex: '#00ffb0', bri: 70, grad: ['#b4fff0', '#00ffb0', '#00664a'] },
+  { id: 's-rose', cat: 'Unies', name: 'Rose néon', mode: 'color', hex: '#ff1f8f', bri: 80, grad: ['#ff8cc6', '#ff1f8f', '#6b003a'] },
+  { id: 's-cyan', cat: 'Unies', name: 'Bleu arctique', mode: 'color', hex: '#00c8ff', bri: 75, grad: ['#bff1ff', '#00c8ff', '#004a66'] },
+  // Dégradés (effet personnalisé, fondu entre les couleurs)
+  { id: 's-sunset', cat: 'Dégradés', name: 'Coucher de soleil', mode: 'custom', colors: ['#ff4e00', '#ff0f6a', '#8a00ff'], style: 3, speed: 35, bri: 90 },
+  { id: 's-aurora', cat: 'Dégradés', name: 'Aurore boréale', mode: 'custom', colors: ['#00ff9c', '#00d4ff', '#7a2bff'], style: 3, speed: 25, bri: 85 },
+  { id: 's-ocean', cat: 'Dégradés', name: 'Océan', mode: 'custom', colors: ['#0030ff', '#00a2ff', '#00ffd5'], style: 3, speed: 30, bri: 85 },
+  { id: 's-miami', cat: 'Dégradés', name: 'Miami', mode: 'custom', colors: ['#ff2ea6', '#b14bff', '#00e5ff'], style: 3, speed: 35, bri: 90 },
+  { id: 's-cyber', cat: 'Dégradés', name: 'Cyberpunk', mode: 'custom', colors: ['#ff00c8', '#6a00ff', '#00f0ff'], style: 3, speed: 45, bri: 100 },
+  { id: 's-lave', cat: 'Dégradés', name: 'Lave', mode: 'custom', colors: ['#ff0000', '#ff4d00', '#ff9900'], style: 3, speed: 30, bri: 100 },
+  { id: 's-foret', cat: 'Dégradés', name: 'Forêt', mode: 'custom', colors: ['#00a84f', '#3cff5a', '#c8ff00'], style: 3, speed: 25, bri: 80 },
+  { id: 's-bonbon', cat: 'Dégradés', name: 'Bonbon', mode: 'custom', colors: ['#ff7ad9', '#b37aff', '#7ad7ff'], style: 3, speed: 30, bri: 80 },
+  { id: 's-glace', cat: 'Dégradés', name: 'Glacier', mode: 'custom', colors: ['#ffffff', '#9fe8ff', '#2a7bff'], style: 3, speed: 25, bri: 80 },
+  { id: 's-braise', cat: 'Dégradés', name: 'Braise', mode: 'custom', colors: ['#ff2a00', '#ff7a00', '#ffc400'], style: 1, speed: 30, bri: 90 },
+  { id: 's-royal', cat: 'Dégradés', name: 'Royal', mode: 'custom', colors: ['#1a2bff', '#7a00ff', '#ffc400'], style: 3, speed: 25, bri: 85 },
+  { id: 's-pastel', cat: 'Dégradés', name: 'Pastel', mode: 'custom', colors: ['#ffb3c7', '#ffe29a', '#b5f5c8', '#a8d8ff'], style: 3, speed: 25, bri: 70 },
+  // Animées (effets intégrés)
+  { id: 's-rainbow', cat: 'Animées', name: 'Arc-en-ciel', mode: 'effect', effect: 255, speed: 40, bri: 100 },
+  { id: 's-vague', cat: 'Animées', name: 'Vague bleue', mode: 'effect', effect: 165, speed: 45, bri: 90 },
+  { id: 's-k2000', cat: 'Animées', name: 'Scanner rouge', mode: 'effect', effect: 101, speed: 60, bri: 100 },
+  { id: 's-rideau', cat: 'Animées', name: 'Rideau 7 couleurs', mode: 'effect', effect: 57, speed: 50, bri: 100 },
+  { id: 's-flux', cat: 'Animées', name: 'Flux jaune · cyan', mode: 'effect', effect: 51, speed: 50, bri: 90 },
+  { id: 's-gyro', cat: 'Animées', name: 'Gyrophare', mode: 'custom', colors: ['#ff0000', '#0030ff'], style: 2, speed: 70, bri: 100 },
+  // Musique
+  { id: 's-soiree', cat: 'Musique', name: 'Soirée', mode: 'music', micMode: 1, sens: 95, bri: 100, grad: ['#6a11cb', '#ff2a8a'] },
+  { id: 's-club', cat: 'Musique', name: 'Club', mode: 'music', micMode: 2, sens: 100, bri: 100, grad: ['#00e5ff', '#6a00ff', '#ff00c8'] },
+];
+const OLD_DEFAULT_NAMES = ['Rouge sport', 'Nuit bleue', 'Blanc chaud', 'Arc-en-ciel', 'Soirée', 'Violet lounge'];
+let scenes = load('ca.scenes', []);
+if (!load('ca.v2', false)) { // migration : les anciennes scènes par défaut deviennent des suggestions
+  scenes = scenes.filter(s => !OLD_DEFAULT_NAMES.includes(s.name)); save('ca.scenes', scenes); save('ca.v2', true);
+}
+let favs = load('ca.favs', null) || [SUGGESTIONS[0], SUGGESTIONS[8], SUGGESTIONS[20]];
+let sugCat = 'Toutes';
+function sceneColors(sc) {
+  if (sc.grad) return sc.grad;
+  if (sc.mode === 'custom') return sc.colors;
+  if (sc.mode === 'color') return [sc.hex, sc.hex];
+  if (sc.mode === 'music') return ['#6a11cb', '#ff2a8a'];
+  const g = fxById.get(sc.effect)?.[0]; return g ? g.palette : RAINBOW;
+}
+function sceneBg(sc) {
+  const c = sceneColors(sc);
+  return `radial-gradient(circle at 25% 15%,rgba(255,255,255,.35),transparent 55%),linear-gradient(135deg,${c.length > 1 ? c.join(',') : c[0] + ',' + c[0]})`;
+}
+function sceneSub(sc) {
+  if (sc.mode === 'color') return 'Couleur · ' + sc.bri + ' %';
+  if (sc.mode === 'custom') return (CUSTOM_STYLES.find(([v]) => v === sc.style)?.[1] || 'Dégradé') + ' · ' + sc.colors.length + ' couleurs';
+  if (sc.mode === 'music') return 'Musique · mode ' + sc.micMode;
+  return sc.effect === 255 ? 'Effet · Auto' : 'Effet · ' + (fxById.get(sc.effect)?.[0].title || '');
+}
+const sceneTile = (sc, attrs, del) => `<button class="scene" ${attrs}><div class="bgc" style="background:${sceneBg(sc)}"></div><b>${esc(sc.name)}</b><span>${esc(sceneSub(sc))}</span>${del ? `<div class="del" ${del}>✕</div>` : ''}</button>`;
 function renderScenes() {
-  const box = $('scenes'); box.innerHTML = '';
-  const list = loadScenes();
-  if (!list.length) { box.innerHTML = '<span style="color:var(--mut);font-size:13px">Aucune scène</span>'; return; }
-  list.forEach((sc, i) => {
-    const w = document.createElement('div'); w.className = 'scene';
-    const b = document.createElement('button');
-    b.textContent = sc.name; b.style.borderLeft = '6px solid ' + sc.color;
-    b.onclick = () => applyScene(sc);
-    const x = document.createElement('button'); x.textContent = '✕';
-    x.onclick = () => { const l = loadScenes(); l.splice(i, 1); saveScenes(l); renderScenes(); };
-    w.append(b, x); box.append(w);
-  });
+  $('#scenes').innerHTML = scenes.length ? scenes.map((sc, i) => sceneTile(sc, `data-i="${i}"`, `data-del="${i}"`)).join('')
+    : '<div class="empty" style="padding:14px 0">Aucune scène perso pour l\'instant — enregistre ton ambiance ci-dessus.</div>';
+  const cats = ['Toutes', ...new Set(SUGGESTIONS.map(s => s.cat))];
+  $('#sugCats').innerHTML = cats.map(c => `<button class="chip${c === sugCat ? ' act' : ''}" data-cat="${c}">${c}</button>`).join('');
+  $('#suggestions').innerHTML = SUGGESTIONS.filter(s => sugCat === 'Toutes' || s.cat === sugCat).map(sc => sceneTile(sc, `data-sid="${sc.id}"`)).join('');
+  updateFades($('#sugCats'));
 }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 function applyScene(sc) {
-  send(cmd.power(1));
-  if (sc.mode != null) { setMode(sc.mode); setSpeed(sc.speed); state.dir = sc.dir; send(cmd.dir(sc.dir)); }
-  else setColor(sc.color);
-  setBri(sc.bri);
-  log('Scène « ' + sc.name + ' »');
+  S.on = true; send('power', P.power(true, S.target)); $('#powerBtn').classList.add('on');
+  if (sc.mode === 'color') applyColor(sc.hex);
+  else if (sc.mode === 'effect') { S.speed = sc.speed ?? S.speed; speed.set(S.speed); playEffect(sc.effect); }
+  else if (sc.mode === 'music') { if (sc.sens) setSens(sc.sens); setMic(sc.micMode); }
+  else if (sc.mode === 'custom') {
+    S.custom.slots = [...sc.colors, null, null, null, null, null, null, null, null].slice(0, 8);
+    S.custom.style = sc.style ?? 3; S.custom.dir = sc.dir ?? 0; renderCustom();
+    if (sc.speed) { S.speed = sc.speed; speed.set(S.speed); send('speed', P.speed(S.speed)); }
+    playCustom(true);
+    document.documentElement.style.setProperty('--glow', sc.colors[0]);
+  }
+  setBri(sc.bri ?? S.bri);
+  toast('« ' + sc.name + ' »');
 }
-$('sceneSave').onclick = () => {
-  const name = $('sceneName').value.trim() || 'Scène ' + (loadScenes().length + 1);
-  const l = loadScenes(); l.push({ name, ...state }); saveScenes(l); $('sceneName').value = ''; renderScenes();
+function snapshot(name) {
+  const base = { name, bri: S.bri };
+  if (S.mode === 'effect') return { ...base, mode: 'effect', effect: S.effect, speed: S.speed };
+  if (S.mode === 'music') return { ...base, mode: 'music', micMode: S.micMode, sens: S.sens };
+  if (S.mode === 'custom') return { ...base, mode: 'custom', colors: S.custom.slots.filter(Boolean), style: S.custom.style, dir: S.custom.dir, speed: S.speed };
+  return { ...base, mode: 'color', hex: S.hex };
+}
+function stateLabel() {
+  if (S.mode === 'effect') return S.effect === 255 ? 'Auto' : (fxById.get(S.effect)?.[0].title || 'Effet');
+  if (S.mode === 'music') return 'Musique ' + S.micMode;
+  if (S.mode === 'custom') return 'Mon dégradé';
+  return colorName(S.h, S.s);
+}
+
+/* ---------------- Favoris (3 emplacements, onglet Couleur) ---------------- */
+let favSlot = 0;
+function renderFavs() {
+  $('#favs').innerHTML = favs.map((f, i) => f ? sceneTile(f, `data-fav="${i}"`, `data-fdel="${i}"`)
+    : `<button class="favEmpty" data-fav="${i}"><i>+</i>Ajouter</button>`).join('');
+}
+function openSheet(slot) {
+  favSlot = slot;
+  $('#sheetTitle').textContent = favs[slot] ? 'Remplacer le favori ' + (slot + 1) : 'Ajouter un favori';
+  const opt = (sc, key) => `<button class="opt" data-pick="${key}"><div class="dotc" style="background:${sceneBg(sc)}"></div><div><b>${esc(sc.name)}</b><span>${esc(sceneSub(sc))}</span></div></button>`;
+  const cur = snapshot(stateLabel());
+  let html = '<h4>Maintenant</h4>' + opt(cur, 'cur');
+  if (scenes.length) html += '<h4>Mes scènes</h4>' + scenes.map((sc, i) => opt(sc, 'm' + i)).join('');
+  for (const c of new Set(SUGGESTIONS.map(s => s.cat))) html += `<h4>${c}</h4>` + SUGGESTIONS.filter(s => s.cat === c).map(sc => opt(sc, 's' + sc.id)).join('');
+  $('#sheetList').innerHTML = html; $('#sheetList').scrollTop = 0;
+  $('#sheet').classList.add('open'); $('#sheetBg').classList.add('open'); haptic();
+}
+function closeSheet() { $('#sheet').classList.remove('open'); $('#sheetBg').classList.remove('open'); }
+$('#sheetBg').onclick = closeSheet;
+$('#sheetList').addEventListener('click', e => {
+  const o = e.target.closest('[data-pick]'); if (!o) return; const k = o.dataset.pick;
+  const sc = k === 'cur' ? snapshot(stateLabel()) : k[0] === 'm' ? scenes[+k.slice(1)] : SUGGESTIONS.find(s => 's' + s.id === k);
+  favs[favSlot] = structuredClone(sc); save('ca.favs', favs); renderFavs(); closeSheet(); toast('Favori ' + (favSlot + 1) + ' : ' + sc.name);
+});
+$('#favs').addEventListener('click', e => {
+  const d = e.target.closest('[data-fdel]');
+  if (d) { e.stopPropagation(); favs[+d.dataset.fdel] = null; save('ca.favs', favs); renderFavs(); haptic(); return; }
+  const f = e.target.closest('[data-fav]'); if (!f) return; const i = +f.dataset.fav;
+  if (!favs[i] || $('#favs').classList.contains('editing')) openSheet(i); else applyScene(favs[i]);
+});
+$('#favEdit').onclick = e => { const on = $('#favs').classList.toggle('editing'); e.target.textContent = on ? 'Terminé' : 'Modifier'; e.target.classList.toggle('act', on); };
+
+/* ---------------- Rangées défilantes (souris + tactile) ---------------- */
+function updateFades(el) {
+  if (!el) return; const max = el.scrollWidth - el.clientWidth;
+  el.style.setProperty('--fl', el.scrollLeft > 2 ? '28px' : '0px');
+  el.style.setProperty('--fr', el.scrollLeft < max - 2 ? '28px' : '0px');
+}
+function hscroll(el) {
+  el.addEventListener('scroll', () => updateFades(el), { passive: true });
+  el.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) { el.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  let down = false, sx = 0, sl = 0, moved = false;
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') return; down = true; moved = false; sx = e.clientX; sl = el.scrollLeft; });
+  window.addEventListener('pointermove', e => { if (!down) return; const dx = e.clientX - sx; if (Math.abs(dx) > 4) { moved = true; el.classList.add('grabbing'); } el.scrollLeft = sl - dx; });
+  window.addEventListener('pointerup', () => { if (!down) return; down = false; el.classList.remove('grabbing'); });
+  el.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+  new ResizeObserver(() => updateFades(el)).observe(el);
+  updateFades(el);
+}
+function scrollChipIntoView(el) { const a = el.querySelector('.act'); if (a) a.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); }
+
+/* ---------------- Zones ---------------- */
+const ZONES = [['dmx', 'Symphonie', 'Bandes adressables · effets'], ['rgb', 'RGB', 'Bandes simples']];
+function renderZones() {
+  $$('#targetSeg button').forEach(b => b.classList.toggle('act', b.dataset.t === S.target));
+  $('#zones').innerHTML = ZONES.map(([z, n, d]) => { const Z = S.zones[z]; return `
+    <div class="zone" data-z="${z}">
+      <div class="top"><div class="zdot" style="background:${Z.hex};color:${Z.hex}"></div><div class="t"><b>${n}</b><span>${d}</span></div><button class="toggle${Z.on ? ' on' : ''}" data-zpow="${z}"></button></div>
+      <div class="slider sm tint" data-zbri="${z}" style="--glow:${Z.hex}"><input type="range" min="1" max="100" value="${Z.bri}"><div class="fill"></div><div class="ico">Luminosité</div><div class="val">${Z.bri}%</div></div>
+      <div class="grid2" style="margin-top:8px"><button class="pill" data-zcol="${z}">Couleur actuelle</button><button class="pill" data-zid="${z}">Identifier</button></div>
+    </div>`; }).join('');
+  $$('#zones [data-zbri]').forEach(el => { const z = el.dataset.zbri; slider(el, { value: S.zones[z].bri,
+    onInput: v => { S.zones[z].bri = v; send('zb' + z, P.bri(v, z)); persist(); } }); });
+}
+async function identify(z) {
+  toast('Regarde quelles LED clignotent en blanc…');
+  for (let i = 0; i < 3; i++) {
+    send('zid' + z, P.color(255, 255, 255, z)); await new Promise(r => setTimeout(r, 350));
+    send('zid' + z, P.color(0, 0, 0, z)); await new Promise(r => setTimeout(r, 350));
+  }
+  send('zid' + z, P.color(...hex2rgb(S.zones[z].hex), z));
+}
+
+/* ---------------- Effet personnalisé ---------------- */
+const CUSTOM_STYLES = [[0, 'Saut'], [1, 'Souffle'], [2, 'Flash'], [3, 'Fondu'], [4, 'Empilement'], [5, 'Rideau'], [6, 'Souffle 2'], [7, 'Course']];
+function renderCustom() {
+  $('#slots').innerHTML = S.custom.slots.map((c, i) => `<button class="slot${c ? '' : ' vide'}" data-slot="${i}" style="${c ? 'background:' + c : ''}"></button>`).join('');
+  $('#customStyles').innerHTML = CUSTOM_STYLES.map(([v, n]) => `<button class="chip${v === S.custom.style ? ' act' : ''}" data-cs="${v}">${n}</button>`).join('');
+  $$('#customDir button').forEach(b => b.classList.toggle('act', +b.dataset.d === S.custom.dir));
+}
+function playCustom(silent) {
+  const cols = S.custom.slots.filter(Boolean);
+  if (!cols.length) return toast('Ajoute au moins une couleur');
+  cols.forEach((c, i) => send('cc' + i, P.customColor(i + 1, ...hex2rgb(c), cols.length)));
+  send('cmode', P.customMode(S.custom.style));
+  send('cdir', P.dir(S.custom.dir));
+  S.mode = 'custom'; if (!S.on) setPower(true); persist(); haptic(); paintColor(); if (!silent) toast('Effet personnalisé lancé');
+}
+
+/* ---------------- Initialisation UI ---------------- */
+const briMain = slider($('#briMain'), { value: S.bri, onInput: v => setBri(v) });
+const speed = slider($('#speed'), { value: S.speed, onInput: v => { S.speed = v; send('speed', P.speed(v)); persist(); } });
+let setSens;
+const sens = slider($('#sens'), { value: S.sens, onInput: v => setSens(v) });
+setSens = v => { S.sens = v; sens.set(v); send('sens', P.sens(v)); send('sensRgb', P.sensRgb(v)); persist(); };
+const adv = {
+  hue: slider($('#advHue'), { value: S.h, fmt: () => '', onInput: v => setHS(v, S.s) }),
+  sat: slider($('#advSat'), { value: S.s, fmt: () => '', onInput: v => setHS(S.h, v) }),
+  bri: slider($('#advBri'), { value: S.bri, fmt: () => '', onInput: v => setBri(v) }),
+  k: slider($('#advK'), { value: 6500, fmt: () => '', onInput: v => { $('#advKV').textContent = v + 'K'; applyColor(rgb2hex(...kelvin2rgb(v))); } }),
+  r: slider($('#advR'), { value: 255, fmt: () => '', onInput: v => { const [, g, b] = hex2rgb(S.hex); applyColor(rgb2hex(v, g, b)); } }),
+  g: slider($('#advG'), { value: 0, fmt: () => '', onInput: v => { const [r, , b] = hex2rgb(S.hex); applyColor(rgb2hex(r, v, b)); } }),
+  b: slider($('#advB'), { value: 0, fmt: () => '', onInput: v => { const [r, g] = hex2rgb(S.hex); applyColor(rgb2hex(r, g, v)); } }),
 };
-renderScenes();
+
+pointerDrag($('#ring'), (x, y) => { let h = Math.atan2(y, x) * 180 / Math.PI + 90; setHS(h, 100); });
+pointerDrag($('#wheel'), (x, y, r) => { const h = Math.atan2(-y, x) * 180 / Math.PI; setHS(h, Math.hypot(x, y) / r * 100); });
+
+const QUICK = ['#ff0000', '#ff3d00', '#ff8a00', '#ffd000', '#00ff40', '#00ffd0', '#00b4ff', '#0030ff', '#6a00ff', '#c000ff', '#ff00a8', '#ffffff'];
+$('#quickColors').innerHTML = QUICK.map(c => `<button class="sw" data-c="${c}" style="background:${c}"></button>`).join('');
+$('#quickColors').addEventListener('click', e => { const b = e.target.closest('.sw'); if (b) { applyColor(b.dataset.c); haptic(); } });
+$$('[data-kelvin]').forEach(b => b.onclick = () => { applyColor(rgb2hex(...kelvin2rgb(+b.dataset.kelvin))); haptic(); });
+
+$('#powerBtn').onclick = () => setPower(!S.on);
+$('#connectBtn').onclick = () => connect();
+$('#disconnectBtn').onclick = () => { manualDisconnect = true; device?.gatt?.connected && device.gatt.disconnect(); };
+
+// onglets
+$('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+  $$('#tabs button').forEach(x => x.classList.toggle('act', x === b));
+  $$('.page').forEach(p => p.classList.toggle('active', p.dataset.page === b.dataset.tab));
+  $('#pageTitle').textContent = $(`.page[data-page="${b.dataset.tab}"]`).dataset.title;
+  window.scrollTo({ top: 0 }); requestAnimationFrame(() => { paintColor(); $$('.chips').forEach(updateFades); }); haptic(); });
+
+// effets
+$('#fxCats').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; fxCat = c.dataset.cat; renderFxCats(); renderFx(); scrollChipIntoView($('#fxCats')); haptic(); });
+$('#fxSearch').addEventListener('input', renderFx);
+$('#fxList').addEventListener('click', e => { const c = e.target.closest('.fx'); if (!c) return;
+  const g = FX.find(x => x.key === c.dataset.key); const cur = fxById.get(S.effect);
+  playEffect(cur && cur[0] === g ? S.effect : g.ids[g.dirs[0]]); });
+$('#fxDir').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const g = fxById.get(S.effect)[0]; playEffect(g.ids[b.dataset.d]); });
+$('#fxAuto').onclick = () => playEffect(255);
+
+// musique
+$('#micPrev').onclick = () => setMic(S.micMode - 1);
+$('#micNext').onclick = () => setMic(S.micMode + 1);
+$('#micChips').innerHTML = Array.from({ length: 24 }, (_, i) => `<button class="chip" data-m="${i + 1}">${i + 1}</button>`).join('');
+$('#micChips').addEventListener('click', e => { const c = e.target.closest('.chip'); if (c) setMic(+c.dataset.m); });
+$$('[data-voicergb]').forEach(b => b.onclick = () => { send('voiceRgb', P.voiceRgb(+b.dataset.voicergb)); $$('[data-voicergb]').forEach(x => x.classList.toggle('act', x === b)); haptic(); });
+
+// scènes
+$('#scenes').addEventListener('click', e => {
+  const d = e.target.closest('[data-del]'); if (d) { scenes.splice(+d.dataset.del, 1); save('ca.scenes', scenes); renderScenes(); haptic(); return; }
+  const s = e.target.closest('.scene'); if (s && !$('#scenes').classList.contains('editing')) applyScene(scenes[+s.dataset.i]);
+});
+$('#sceneSave').onclick = () => { const n = $('#sceneName').value.trim() || 'Scène ' + (scenes.length + 1);
+  scenes.push(snapshot(n)); save('ca.scenes', scenes); $('#sceneName').value = ''; renderScenes(); toast('Scène enregistrée'); haptic(); };
+$('#suggestions').addEventListener('click', e => { const s = e.target.closest('[data-sid]'); if (s) applyScene(SUGGESTIONS.find(x => x.id === s.dataset.sid)); });
+$('#sugCats').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; sugCat = c.dataset.cat; renderScenes(); scrollChipIntoView($('#sugCats')); haptic(); });
+hscroll($('#fxCats')); hscroll($('#sugCats'));
+$('#sceneEdit').onclick = e => { const on = $('#scenes').classList.toggle('editing'); e.target.textContent = on ? 'Terminé' : 'Modifier'; e.target.classList.toggle('act', on); };
+
+// avancé
+$('#hexApply').onclick = () => { let v = $('#hexIn').value.trim(); if (!v.startsWith('#')) v = '#' + v;
+  if (/^#[0-9a-f]{6}$/i.test(v)) { applyColor(v); $('#hexIn').blur(); } else toast('Code couleur invalide (ex. #FF3300)'); };
+$('#hexIn').addEventListener('keydown', e => e.key === 'Enter' && $('#hexApply').click());
+$('#targetSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.target = b.dataset.t; renderZones(); persist(); resendState(); haptic(); });
+$('#zones').addEventListener('click', e => {
+  const p = e.target.closest('[data-zpow]'), c = e.target.closest('[data-zcol]'), i = e.target.closest('[data-zid]');
+  if (p) { const z = p.dataset.zpow; S.zones[z].on = !S.zones[z].on; send('zp' + z, P.power(S.zones[z].on, z)); p.classList.toggle('on', S.zones[z].on); }
+  if (c) { const z = c.dataset.zcol; S.zones[z].hex = S.hex; send('zc' + z, P.color(...hex2rgb(S.hex), z)); renderZones(); }
+  if (i) identify(i.dataset.zid);
+  persist(); haptic();
+});
+$('#slots').addEventListener('click', e => { const s = e.target.closest('.slot'); if (!s) return; const i = +s.dataset.slot;
+  S.custom.slots[i] = S.custom.slots[i] ? null : S.hex; renderCustom(); persist(); haptic(); });
+$('#customStyles').addEventListener('click', e => { const c = e.target.closest('.chip'); if (!c) return; S.custom.style = +c.dataset.cs; renderCustom(); persist(); });
+$('#customDir').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.custom.dir = +b.dataset.d; renderCustom(); persist(); });
+$('#customPlay').onclick = playCustom;
+$$('[data-set]').forEach(t => { t.classList.toggle('on', !!S.settings[t.dataset.set]);
+  t.onclick = () => { S.settings[t.dataset.set] = !S.settings[t.dataset.set]; t.classList.toggle('on'); persist(); haptic(); }; });
+$('#rawSend').onclick = () => { const b = ($('#raw').value.match(/[0-9a-f]{2}/gi) || []).map(x => parseInt(x, 16)); if (b.length === 9) send('raw' + Date.now(), Uint8Array.from(b)); else toast('Une trame fait 9 octets'); };
+
+function renderAll() {
+  $('#powerBtn').classList.toggle('on', S.on);
+  briMain.set(S.bri); adv.bri.set(S.bri); $('#advBriV').textContent = S.bri + '%';
+  $('#micNum').textContent = S.micMode;
+  $$('#micChips .chip').forEach(c => c.classList.toggle('act', +c.dataset.m === S.micMode));
+  renderFxCats(); renderFx(); renderNow(); renderScenes(); renderFavs(); renderZones(); renderCustom(); paintColor();
+}
+renderAll();
+window.addEventListener('resize', paintColor);
+if (!navigator.bluetooth) $('#connectHint').textContent = 'Ce navigateur ne gère pas le Bluetooth web. Sur iPhone, ouvre cette page dans Bluefy (en plein écran).';
+tryAutoConnect();
 </script>
 </body>
 </html>
