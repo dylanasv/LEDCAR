@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LEDCAR Test</title>
+<style>
+  :root { --bg:#0e0f12; --card:#181a20; --line:#2a2d36; --txt:#e8e9ee; --mut:#8b8f9c; --acc:#e53935; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:15px/1.4 system-ui,-apple-system,Segoe UI,sans-serif; padding:16px; max-width:640px; margin-inline:auto; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut); margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button { background:#2a2d36; color:var(--txt); border:0; border-radius:8px; padding:10px 14px; font:inherit; cursor:pointer; }
+  button.pri { background:var(--acc); }
+  button:disabled { opacity:.4; cursor:default; }
+  input[type=range] { flex:1; min-width:150px; accent-color:var(--acc); }
+  input[type=color] { width:56px; height:44px; border:0; background:none; padding:0; }
+  input[type=number], input[type=text] { background:#0e0f12; color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:9px; font:inherit; }
+  input[type=text] { flex:1; font-family:ui-monospace,Consolas,monospace; }
+  .sw { width:36px; height:36px; border-radius:50%; border:2px solid var(--line); padding:0; }
+  .val { min-width:44px; text-align:right; font-variant-numeric:tabular-nums; color:var(--mut); }
+  #status { font-size:13px; color:var(--mut); }
+  #status.ok { color:#4caf50; }
+  #log { font:12px/1.5 ui-monospace,Consolas,monospace; background:#0a0b0d; border-radius:8px; padding:8px; height:160px; overflow:auto; white-space:pre-wrap; color:#9aa0ad; }
+  .scene { display:flex; gap:4px; }
+  .scene button:last-child { padding:10px; color:var(--mut); }
+  .dis { opacity:.45; pointer-events:none; }
+</style>
+</head>
+<body>
+<h1>LEDCAR-01 · page de test</h1>
+
+<div class="card">
+  <div class="row">
+    <button id="btnConnect" class="pri">Connecter</button>
+    <button id="btnDisconnect" disabled>Déconnecter</button>
+    <span id="status">Déconnecté</span>
+  </div>
+</div>
+
+<div id="controls" class="dis">
+  <div class="card">
+    <h2>Alimentation</h2>
+    <div class="row">
+      <button data-power="1">Allumer</button>
+      <button data-power="0">Éteindre</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Couleur</h2>
+    <div class="row">
+      <input type="color" id="color" value="#ff0000">
+      <button class="sw" style="background:#ff0000" data-c="#ff0000"></button>
+      <button class="sw" style="background:#ff6a00" data-c="#ff6a00"></button>
+      <button class="sw" style="background:#ffffff" data-c="#ffffff"></button>
+      <button class="sw" style="background:#00ff00" data-c="#00ff00"></button>
+      <button class="sw" style="background:#00c8ff" data-c="#00c8ff"></button>
+      <button class="sw" style="background:#0000ff" data-c="#0000ff"></button>
+      <button class="sw" style="background:#a000ff" data-c="#a000ff"></button>
+      <button class="sw" style="background:#ff00a0" data-c="#ff00a0"></button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Luminosité</h2>
+    <div class="row"><input type="range" id="bri" min="1" max="100" value="100"><span class="val" id="briV">100%</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Effets</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="effPrev">◀</button>
+      <input type="number" id="eff" min="1" max="210" value="1" style="width:80px">
+      <button id="effNext">▶</button>
+      <button id="effSend">Lancer</button>
+      <button id="effAuto">Auto</button>
+    </div>
+    <div class="row"><span style="width:60px">Vitesse</span><input type="range" id="spd" min="1" max="100" value="50"><span class="val" id="spdV">50%</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Musique (micro du boîtier) — 7B FF 0B n 00</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button id="micPrev">◀</button>
+      <input type="number" id="mic" min="1" max="255" value="1" style="width:80px">
+      <button id="micNext">▶</button>
+      <button id="micSend">Lancer</button>
+    </div>
+    <div class="row" style="margin-bottom:10px"><span style="width:90px">Sensibilité</span><input type="range" id="sens" min="1" max="100" value="90"><span class="val" id="sensV">90%</span></div>
+    <h2 style="margin-top:14px">Musique zone RGB — 7E 00 0E n</h2>
+    <div class="row">
+      <button data-rgbmic="0">Saut</button><button data-rgbmic="1">Respiration</button>
+      <button data-rgbmic="2">Flash</button><button data-rgbmic="3">Dégradé</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Scènes favorites</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="sceneName" placeholder="Nom de la scène" style="font-family:inherit">
+      <button id="sceneSave">Sauver l'état actuel</button>
+    </div>
+    <div class="row" id="scenes"></div>
+  </div>
+
+  <div class="card">
+    <h2>Trame brute (hex)</h2>
+    <div class="row"><input type="text" id="raw" placeholder="7B FF 04 01 FF FF FF FF BF"><button id="rawSend">Envoyer</button></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Journal</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+const SERVICE = 0xffe0, CHAR_WRITE = 0xffe1, CHAR_NOTIFY = 0xfff4;
+const DEFAULT = { power: 1, color: '#ff0000', bri: 100 };
+
+let device = null, chWrite = null;
+// Dernier état envoyé (utilisé pour les scènes)
+const state = { color: DEFAULT.color, bri: DEFAULT.bri, mode: null, speed: 50, dir: 0 };
+
+const $ = id => document.getElementById(id);
+const hex = b => [...b].map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+function log(msg) { const l = $('log'); l.textContent += new Date().toLocaleTimeString() + '  ' + msg + '\n'; l.scrollTop = l.scrollHeight; }
+
+// --- Trames LEDCAR-01 (variante 7B … BF) ---
+const frame = (...b) => new Uint8Array([0x7B, ...b, 0xBF]);
+const cmd = {
+  power: on => frame(0xFF, 0x04, on ? 1 : 0, 0xFF, 0xFF, 0xFF, 0xFF),
+  color: (r, g, b, dir = 0) => frame(0x00, 0x07, r, g, b, dir, 0xFF),
+  bri: pct => frame(0xFF, 0x01, Math.round(pct * 32 / 100), pct, 0x00, 0xFF, 0xFF),
+  mode: id => frame(0xFF, 0x03, id, 0xFF, 0xFF, 0xFF, 0xFF),
+  speed: pct => frame(0xFF, 0x02, pct, 0xFF, 0x00, 0xFF, 0xFF),
+  dir: d => frame(0xFF, 0x0D, d, 0xFF, 0xFF, 0xFF, 0xFF), // n'agit que sur les modes « custom » (appli officielle)
+  // Source : décompilation de l'appli LED LAMP 4.3.7 (NetConnectBle.setCar01VoiceCtlMode / setSensitivity)
+  voice: n => frame(0xFF, 0x0B, n, 0x00, 0xFF, 0xFF, 0xFF),
+  sens: s => frame(0xFF, 0x0C, s, 0x00, 0xFF, 0xFF, 0xFF),
+  voiceRgb: n => new Uint8Array([0x7E, 0x00, 0x0E, n, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF]),
+  sensRgb: s => new Uint8Array([0x7E, 0xFF, 0x07, s, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF]),
+};
+
+// --- File d'envoi : une écriture GATT à la fois ---
+let queue = Promise.resolve();
+function send(bytes) {
+  if (!chWrite) { log('⚠ pas connecté'); return queue; }
+  queue = queue.then(async () => {
+    try {
+      if (chWrite.writeValueWithoutResponse) await chWrite.writeValueWithoutResponse(bytes);
+      else await chWrite.writeValue(bytes);
+      log('→ ' + hex(bytes));
+    } catch (e) { log('✖ ' + e.message); }
+  });
+  return queue;
+}
+// Limite le débit pour les sliders / color picker (dernière valeur gagne)
+function throttle(fn, ms = 60) {
+  let t = null, last = null;
+  return (...a) => { last = a; if (t) return; t = setTimeout(() => { t = null; fn(...last); }, ms); };
+}
+
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+function setColor(h) { state.color = h; state.mode = null; $('color').value = h; send(cmd.color(...hexToRgb(h), state.dir)); }
+function setBri(p) { state.bri = p; $('bri').value = p; $('briV').textContent = p + '%'; send(cmd.bri(p)); }
+function setMode(id) { state.mode = id; send(cmd.mode(id)); }
+function setSpeed(p) { state.speed = p; $('spd').value = p; $('spdV').textContent = p + '%'; send(cmd.speed(p)); }
+
+// --- Connexion ---
+async function connect() {
+  if (!navigator.bluetooth) { log('✖ Web Bluetooth indisponible (utilise Chrome/Edge sur PC, Bluefy sur iPhone)'); return; }
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ namePrefix: 'LEDCAR' }],
+      optionalServices: [SERVICE],
+    });
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    $('status').textContent = 'Connexion…';
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE);
+    chWrite = await svc.getCharacteristic(CHAR_WRITE);
+    try {
+      const chN = await svc.getCharacteristic(CHAR_NOTIFY);
+      await chN.startNotifications();
+      chN.addEventListener('characteristicvaluechanged', e => log('← ' + hex(new Uint8Array(e.target.value.buffer))));
+    } catch (e) { log('(notify FFF4 indisponible : ' + e.message + ')'); }
+
+    $('status').textContent = 'Connecté · ' + device.name; $('status').className = 'ok';
+    $('btnConnect').disabled = true; $('btnDisconnect').disabled = false;
+    $('controls').classList.remove('dis');
+    log('Connecté à ' + device.name);
+
+    // État par défaut : allumé, rouge, 100 %
+    send(cmd.power(1)); setColor(DEFAULT.color); setBri(DEFAULT.bri);
+  } catch (e) { log('✖ ' + e.message); $('status').textContent = 'Déconnecté'; }
+}
+function onDisconnected() {
+  chWrite = null; $('status').textContent = 'Déconnecté'; $('status').className = '';
+  $('btnConnect').disabled = false; $('btnDisconnect').disabled = true;
+  $('controls').classList.add('dis'); log('Déconnecté');
+}
+$('btnConnect').onclick = connect;
+$('btnDisconnect').onclick = () => device?.gatt.connected && device.gatt.disconnect();
+
+// --- Contrôles ---
+document.querySelectorAll('[data-power]').forEach(b => b.onclick = () => send(cmd.power(+b.dataset.power)));
+document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => setColor(b.dataset.c));
+$('color').addEventListener('input', throttle(e => setColor(e.target.value)));
+$('bri').addEventListener('input', throttle(e => setBri(+e.target.value)));
+$('spd').addEventListener('input', throttle(e => setSpeed(+e.target.value)));
+const clampEff = v => Math.min(210, Math.max(1, v));
+$('effSend').onclick = () => setMode(clampEff(+$('eff').value));
+$('effPrev').onclick = () => { $('eff').value = clampEff(+$('eff').value - 1); setMode(+$('eff').value); };
+$('effNext').onclick = () => { $('eff').value = clampEff(+$('eff').value + 1); setMode(+$('eff').value); };
+$('effAuto').onclick = () => setMode(0xFF);
+const clampMic = v => Math.min(255, Math.max(1, v));
+const setVoice = n => { $('mic').value = n; state.mode = null; send(cmd.voice(n)); };
+$('micSend').onclick = () => setVoice(clampMic(+$('mic').value));
+$('micPrev').onclick = () => setVoice(clampMic(+$('mic').value - 1));
+$('micNext').onclick = () => setVoice(clampMic(+$('mic').value + 1));
+$('sens').addEventListener('input', throttle(e => {
+  const s = +e.target.value; $('sensV').textContent = s + '%';
+  send(cmd.sens(s)); send(cmd.sensRgb(s));
+}, 120));
+document.querySelectorAll('[data-rgbmic]').forEach(b => b.onclick = () => send(cmd.voiceRgb(+b.dataset.rgbmic)));
+$('rawSend').onclick = () => {
+  const bytes = ($('raw').value.match(/[0-9a-f]{2}/gi) || []).map(x => parseInt(x, 16));
+  if (bytes.length) send(new Uint8Array(bytes)); else log('✖ trame vide');
+};
+
+// --- Scènes (localStorage) ---
+const KEY = 'ledcar.scenes';
+const loadScenes = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+const saveScenes = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
+function renderScenes() {
+  const box = $('scenes'); box.innerHTML = '';
+  const list = loadScenes();
+  if (!list.length) { box.innerHTML = '<span style="color:var(--mut);font-size:13px">Aucune scène</span>'; return; }
+  list.forEach((sc, i) => {
+    const w = document.createElement('div'); w.className = 'scene';
+    const b = document.createElement('button');
+    b.textContent = sc.name; b.style.borderLeft = '6px solid ' + sc.color;
+    b.onclick = () => applyScene(sc);
+    const x = document.createElement('button'); x.textContent = '✕';
+    x.onclick = () => { const l = loadScenes(); l.splice(i, 1); saveScenes(l); renderScenes(); };
+    w.append(b, x); box.append(w);
+  });
+}
+function applyScene(sc) {
+  send(cmd.power(1));
+  if (sc.mode != null) { setMode(sc.mode); setSpeed(sc.speed); state.dir = sc.dir; send(cmd.dir(sc.dir)); }
+  else setColor(sc.color);
+  setBri(sc.bri);
+  log('Scène « ' + sc.name + ' »');
+}
+$('sceneSave').onclick = () => {
+  const name = $('sceneName').value.trim() || 'Scène ' + (loadScenes().length + 1);
+  const l = loadScenes(); l.push({ name, ...state }); saveScenes(l); $('sceneName').value = ''; renderScenes();
+};
+renderScenes();
+</script>
+</body>
+</html>
