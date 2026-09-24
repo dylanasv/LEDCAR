@@ -410,7 +410,7 @@ nav.tabs.glass,.nowbar.glass,.toast.glass{background:linear-gradient(160deg,rgba
 
     <div class="card glass">
       <h2>Réglages</h2>
-      <div class="setting"><div class="t"><b>Reconnexion automatique</b><span>Se reconnecte seul au contrôleur connu</span></div><button class="toggle" data-set="autoConnect"></button></div>
+      <div class="setting"><div class="t"><b>Reconnexion automatique</b><span>Expérimental — Chrome sur PC uniquement, laisse désactivé sur iPhone</span></div><button class="toggle" data-set="autoConnect"></button></div>
       <div class="setting"><div class="t"><b>État au démarrage</b><span>Allume en rouge à 100 % à chaque connexion</span></div><button class="toggle" data-set="applyDefault"></button></div>
       <div class="setting"><div class="t"><b>Vibrations</b><span>Retour haptique sur les boutons (si supporté)</span></div><button class="toggle" data-set="haptics"></button></div>
       <div class="setting"><div class="t"><b>Déconnecter</b><span id="devName">—</span></div><button class="pill" id="disconnectBtn">Déconnecter</button></div>
@@ -447,6 +447,7 @@ nav.tabs.glass,.nowbar.glass,.toast.glass{background:linear-gradient(160deg,rgba
       d.style.cssText = 'position:fixed;z-index:99;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px);padding:12px 14px;border-radius:14px;background:#b00020;color:#fff;font:13px/1.4 -apple-system,sans-serif;white-space:pre-wrap';
       d.onclick = function () { d.remove(); };
       (document.body || document.documentElement).appendChild(d); }
+    if (/^Script error/i.test(msg)) msg += ' (erreur interne du navigateur, souvent Bluefy)';
     d.textContent = '⚠ ' + msg + '\n(touche pour fermer)';
   }
   window.addEventListener('error', function (e) { show((e.message || 'Erreur') + (e.lineno ? ' — ligne ' + e.lineno : '')); });
@@ -501,13 +502,14 @@ const DEFAULT_STATE = {
   target: 'dmx',
   zones: { dmx: { on: true, hex: '#ff0000', bri: 100 }, rgb: { on: true, hex: '#0050ff', bri: 100 } },
   custom: { slots: ['#ff0000', '#0050ff', null, null, null, null, null, null], style: 0, dir: 0 },
-  settings: { autoConnect: true, applyDefault: true, haptics: true },
+  settings: { autoConnect: false, applyDefault: true, haptics: true },
 };
 const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 const clone = o => JSON.parse(JSON.stringify(o));
 const S = Object.assign(clone(DEFAULT_STATE), load('ca.state', {}));
 S.settings = Object.assign({}, DEFAULT_STATE.settings, S.settings);
+if (!load('ca.v3', false)) { S.settings.autoConnect = false; save('ca.v3', true); } // getDevices() plante dans Bluefy
 S.zones = Object.assign({}, DEFAULT_STATE.zones, S.zones);
 S.custom = Object.assign({}, DEFAULT_STATE.custom, S.custom);
 let persistT; const persist = () => { clearTimeout(persistT); persistT = setTimeout(() => save('ca.state', S), 250); };
@@ -594,7 +596,8 @@ function onDisconnected() {
   }
 }
 async function tryAutoConnect() {
-  if (!S.settings.autoConnect || !navigator.bluetooth?.getDevices) return;
+  // Désactivé par défaut : l'appel getDevices() fait planter le script injecté par Bluefy (« Script error. »)
+  if (!S.settings.autoConnect || /bluefy/i.test(navigator.userAgent) || typeof navigator.bluetooth?.getDevices !== 'function') return;
   try {
     const devs = await navigator.bluetooth.getDevices();
     const d = devs.find(x => (x.name || '').startsWith('LEDCAR'));
