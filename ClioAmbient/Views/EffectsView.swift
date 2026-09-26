@@ -6,7 +6,10 @@ struct EffectsView: View {
     @State private var category = "Tous"
     @State private var speed: Double = 50
 
-    private var current: (EffectGroup, EffectDirection)? { app.s.effect.flatMap { EffectCatalog.byID[$0] } }
+    private var current: (EffectGroup, EffectDirection)? {
+        guard app.s.mode == .effect else { return nil }
+        return app.s.effect.flatMap { EffectCatalog.byID[$0] }
+    }
 
     private var items: [EffectGroup] {
         let words = query.lowercased().folding(options: .diacriticInsensitive, locale: .current).split(separator: " ").map(String.init)
@@ -26,7 +29,7 @@ struct EffectsView: View {
                     TextField("Rechercher un effet, une couleur…", text: $query)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     if !query.isEmpty {
-                        Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                        Button { Haptics.tap(); query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     }
                 }
                 .padding(.horizontal, 14).frame(height: 48)
@@ -61,12 +64,14 @@ struct EffectsView: View {
         .scrollDismissesKeyboard(.immediately)
         .safeAreaInset(edge: .bottom) { nowPlaying }
         .onAppear { speed = Double(app.s.speed) }
+        .onChange(of: app.s.speed) { _, v in speed = Double(v) }
     }
 
     private func effectCard(_ g: EffectGroup) -> some View {
         let isCurrent = current?.0.id == g.id
         let dir = isCurrent ? current!.1 : g.directions[0]
         return Button {
+            Haptics.selection()
             app.playEffect(isCurrent ? app.s.effect! : g.firstID)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
@@ -83,7 +88,8 @@ struct EffectsView: View {
             .shadow(color: isCurrent ? app.glow.opacity(0.4) : .clear, radius: 14)
         }
         .buttonStyle(PressStyle())
-        .sensoryFeedback(.selection, trigger: isCurrent)
+        .animation(.snappy(duration: 0.25), value: isCurrent)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
     private var nowPlaying: some View {
@@ -99,17 +105,18 @@ struct EffectsView: View {
                     app.playEffect(EffectCatalog.autoID)
                 }
             }
-            if let cur = current, cur.0.directions.count > 1, app.s.mode == .effect {
-                Picker("Sens", selection: Binding(get: { cur.1 }, set: { d in if let id = cur.0.ids[d] { app.playEffect(id) } })) {
+            if let cur = current, cur.0.directions.count > 1 {
+                Picker("Sens", selection: Binding(get: { cur.1 }, set: { d in if let id = cur.0.ids[d] { Haptics.selection(); app.playEffect(id) } })) {
                     ForEach(cur.0.directions, id: \.self) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
             }
-            GlassSlider(title: "Vitesse", systemImage: "speedometer", value: $speed, tint: app.glow, height: 42) { app.setSpeed(Int($0)) }
+            GlassSlider(title: "Vitesse", systemImage: "speedometer", value: $speed, tint: app.glow, height: 42, detents: Detents.percent) { app.setSpeed(Int($0)) }
         }
         .padding(14)
         .glassCard(cornerRadius: 24)
         .padding(.horizontal, 12).padding(.bottom, 6)
         .disabled(!app.ble.isConnected)
+        .opacity(app.ble.isConnected ? 1 : 0.5)
     }
 }

@@ -24,17 +24,19 @@ struct ScenesView: View {
                             .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.white.opacity(0.08)))
                             .submitLabel(.done)
                             .onSubmit(save)
-                        Button("Enregistrer", action: save)
-                            .font(.subheadline.weight(.semibold)).foregroundStyle(.black)
-                            .padding(.horizontal, 16).frame(height: 46)
-                            .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.white))
-                            .buttonStyle(PressStyle())
+                        Button(action: save) {
+                            Text("Enregistrer")
+                                .font(.subheadline.weight(.semibold)).foregroundStyle(.black)
+                                .padding(.horizontal, 16).frame(height: 46)
+                                .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.white))
+                        }
+                        .buttonStyle(PressStyle())
                     }
                 }
                 .card()
 
                 SectionHeader(title: "Mes scènes", trailing: app.s.scenes.isEmpty ? nil : AnyView(
-                    Chip(title: editing ? "Terminé" : "Modifier", active: editing) { withAnimation { editing.toggle() } }))
+                    Chip(title: editing ? "Terminé" : "Modifier", active: editing) { withAnimation(.snappy) { editing.toggle() } }))
                     .padding(.horizontal, 4).padding(.top, 8)
 
                 if app.s.scenes.isEmpty {
@@ -43,19 +45,13 @@ struct ScenesView: View {
                 } else {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(app.s.scenes) { sc in
-                            Button { if !editing { app.apply(sc) } } label: { SceneTile(scene: sc) }
-                                .buttonStyle(PressStyle())
-                                .overlay(alignment: .topTrailing) {
-                                    if editing {
-                                        Button { withAnimation { app.s.scenes.removeAll { $0.id == sc.id } } } label: {
-                                            Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.white)
-                                                .frame(width: 28, height: 28).background(Circle().fill(.black.opacity(0.65)))
-                                        }
-                                        .padding(8)
-                                    }
-                                }
-                                .rotationEffect(.degrees(editing ? 0.8 : 0))
-                                .animation(editing ? .easeInOut(duration: 0.15).repeatForever(autoreverses: true) : .default, value: editing)
+                            Button { if !editing { choose(sc) } } label: {
+                                SceneTile(scene: sc, selected: !editing && app.isActive(sc))
+                            }
+                            .buttonStyle(PressStyle())
+                            .deleteBadge(editing) { withAnimation(.snappy) { app.s.scenes.removeAll { $0.id == sc.id } } }
+                            .rotationEffect(.degrees(editing ? 0.8 : 0))
+                            .animation(editing ? .easeInOut(duration: 0.15).repeatForever(autoreverses: true) : .default, value: editing)
                         }
                     }
                 }
@@ -74,7 +70,7 @@ struct ScenesView: View {
 
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(SceneLibrary.suggestions.filter { category == "Toutes" || $0.category == category }) { sc in
-                        Button { app.apply(sc) } label: { SceneTile(scene: sc) }.buttonStyle(PressStyle())
+                        Button { choose(sc) } label: { SceneTile(scene: sc, selected: app.isActive(sc)) }.buttonStyle(PressStyle())
                     }
                 }
             }
@@ -82,9 +78,16 @@ struct ScenesView: View {
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.immediately)
+        .onChange(of: app.s.scenes.isEmpty) { _, empty in if empty { editing = false } }
+    }
+
+    private func choose(_ sc: LightScene) {
+        Haptics.selection()
+        app.apply(sc)
     }
 
     private func save() {
+        Haptics.success()
         app.saveScene(named: name)
         name = ""; nameFocused = false
     }

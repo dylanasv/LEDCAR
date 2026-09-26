@@ -46,6 +46,10 @@ final class BLEManager: NSObject, ObservableObject {
     private var pendingKeys: [String] = []
     private var pending: [String: Data] = [:]
     private var pumping = false
+    /// Écart minimal entre deux trames : en dessous, le contrôleur en perd une de temps en temps
+    private let frameGap: TimeInterval = 0.04
+    /// Écriture acquittée en attente (mode « avec réponse »)
+    private var awaitingAck = false
 
     private let lastDeviceKey = "ble.lastDevice"
 
@@ -107,28 +111,47 @@ final class BLEManager: NSObject, ObservableObject {
 
     // MARK: - Envoi
 
-    /// Envoie une trame. Si une trame de même `key` attend encore, elle est remplacée (la dernière valeur gagne).
+    /// Envoie une trame. Si une trame de même `key` attend encore, elle est remplacée (la dernière valeur gagne)
+    /// et passe en fin de file : l'ordre d'envoi suit l'ordre des derniers ordres donnés. Sinon, taper vite
+    /// couleur → effet → couleur enverrait la couleur avant l'effet, et l'effet l'emporterait.
     func send(_ key: String, _ data: Data) {
         guard data.count == 9 else { log("✖ trame invalide \(key)"); return }
-        if pending[key] == nil { pendingKeys.append(key) }
+        if pending[key] != nil { pendingKeys.removeAll { $0 == key } }
+        pendingKeys.append(key)
         pending[key] = data
         pump()
     }
 
+    private var writeType: CBCharacteristicWriteType {
+        // Écriture acquittée si le contrôleur la propose : la trame est garantie arrivée au module BLE
+        guard let c = writeChar else { return .withoutResponse }
+        return c.properties.contains(.write) ? .withResponse : .withoutResponse
+    }
+
     private func pump() {
-        guard !pumping else { return }
+        guard !pumping, !awaitingAck else { return }
         guard let p = peripheral, let c = writeChar, status == .connected else {
             pending.removeAll(); pendingKeys.removeAll(); return
         }
         guard !pendingKeys.isEmpty else { return }
+        let type = writeType
+        // Tampon d'émission iOS plein : on attend `peripheralIsReady` au lieu de laisser la trame se perdre
+        if type == .withoutResponse && !p.canSendWriteWithoutResponse { return }
         pumping = true
         let key = pendingKeys.removeFirst()
         if let data = pending.removeValue(forKey: key) {
-            let type: CBCharacteristicWriteType = c.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
             p.writeValue(data, for: c, type: type)
             log("→ " + LED.hex(data))
+            if type == .withResponse {
+                awaitingAck = true
+                // Filet de sécurité si l'acquittement n'arrive jamais
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self, self.awaitingAck else { return }
+                    self.awaitingAck = false; self.pump()
+                }
+            }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + frameGap) { [weak self] in
             self?.pumping = false
             self?.pump()
         }
@@ -221,11 +244,22 @@ extension BLEManager: CBPeripheralDelegate {
             if c.uuid == LEDUUID.write { writeChar = c }
             if c.uuid == LEDUUID.notify { peripheral.setNotifyValue(true, for: c) }
         }
-        guard writeChar != nil else { log("✖ Caractéristique FFE1 introuvable"); return }
+        guard let wc = writeChar else { log("✖ Caractéristique FFE1 introuvable"); return }
+        awaitingAck = false; pumping = false
+        log("FFE1 : " + [wc.properties.contains(.write) ? "écriture acquittée" : nil,
+                         wc.properties.contains(.writeWithoutResponse) ? "écriture sans réponse" : nil].compactMap { $0 }.joined(separator: " + "))
         status = .connected
         deviceName = peripheral.name
         log("Connecté à \(peripheral.name ?? "LEDCAR")")
         onConnected?()
+    }
+
+    func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) { pump() }
+
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        if let error { log("✖ écriture : \(error.localizedDescription)") }
+        awaitingAck = false
+        pump()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {

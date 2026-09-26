@@ -32,7 +32,7 @@ struct RootView: View {
                     .tabItem { Label("Avancé", systemImage: "slider.horizontal.3") }.tag(4)
             }
             .tint(.white)
-            .sensoryFeedback(.selection, trigger: tab)
+            .onChange(of: tab) { _, _ in Haptics.selection() }
 
             if let t = app.toast {
                 Text(t)

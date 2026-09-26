@@ -1,4 +1,27 @@
 import SwiftUI
+import UIKit
+
+// MARK: - Retour haptique
+
+/// Retours haptiques centralisés : un seul interrupteur (Réglages → Retour haptique) les coupe tous.
+enum Haptics {
+    static var enabled = true
+    private static let selectionGen = UISelectionFeedbackGenerator()
+    private static let lightGen = UIImpactFeedbackGenerator(style: .light)
+    private static let mediumGen = UIImpactFeedbackGenerator(style: .medium)
+    private static let rigidGen = UIImpactFeedbackGenerator(style: .rigid)
+    private static let notifGen = UINotificationFeedbackGenerator()
+
+    /// Changement de sélection (pastille, scène, effet…)
+    static func selection() { guard enabled else { return }; selectionGen.selectionChanged() }
+    /// Appui sur un bouton d'action
+    static func tap() { guard enabled else { return }; lightGen.impactOccurred() }
+    /// Action marquante (alimentation)
+    static func impact() { guard enabled else { return }; mediumGen.impactOccurred() }
+    /// Butée d'un curseur (0 % / 100 %)
+    static func edge() { guard enabled else { return }; rigidGen.impactOccurred(intensity: 0.7) }
+    static func success() { guard enabled else { return }; notifGen.notificationOccurred(.success) }
+}
 
 // MARK: - Verre liquide
 
@@ -100,16 +123,21 @@ struct GlassSlider: View {
     var tint: Color = .white
     var height: CGFloat = 54
     var format: (Double) -> String = { "\(Int($0)) %" }
+    /// Valeurs « aimantées » avec un petit cran haptique (ex. `Detents.percent`)
+    var detents: [Double] = []
     var onChange: (Double) -> Void
-    @State private var dragging = false
+    @State private var drag = SliderDrag()
 
     var body: some View {
         GeometryReader { geo in
-            let p = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+            // Pendant le glisser, le remplissage suit le doigt en continu (pas d'arrondi à l'entier)
+            let shown = drag.live ?? value
+            let p = (shown - range.lowerBound) / (range.upperBound - range.lowerBound)
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.08))
                 Capsule().fill(LinearGradient(colors: [tint.opacity(0.45), tint], startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(height, geo.size.width * p))
+                DetentTicks(detents: detents, range: range, width: geo.size.width, height: height)
                 HStack {
                     Label(title, systemImage: systemImage).font(.subheadline.weight(.semibold))
                     Spacer()
@@ -121,16 +149,73 @@ struct GlassSlider: View {
             }
             .contentShape(Capsule())
             .gesture(DragGesture(minimumDistance: 0).onChanged { g in
-                dragging = true
                 let np = max(0, min(1, g.location.x / geo.size.width))
-                let nv = (range.lowerBound + np * (range.upperBound - range.lowerBound)).rounded()
-                if nv != value { value = nv; onChange(nv) }
-            }.onEnded { _ in dragging = false })
-            .scaleEffect(dragging ? 1.015 : 1)
-            .animation(.spring(duration: 0.25), value: dragging)
+                drag.update(range.lowerBound + np * (range.upperBound - range.lowerBound), range: range, detents: detents,
+                            value: $value, onChange: onChange)
+            }.onEnded { _ in drag.end(value: value, onChange: onChange) })
+            .scaleEffect(drag.live != nil ? 1.015 : 1)
+            .animation(.spring(duration: 0.25), value: drag.live != nil)
         }
         .frame(height: height)
-        .sensoryFeedback(.selection, trigger: Int(value) / 10)
+    }
+}
+
+enum Detents {
+    /// Crans des curseurs en pourcentage (luminosité, vitesse)
+    static let percent: [Double] = [10, 25, 50, 75, 100]
+}
+
+/// Petits repères sur la piste aux emplacements des crans (les butées n'en ont pas besoin)
+private struct DetentTicks: View {
+    var detents: [Double]
+    var range: ClosedRange<Double>
+    var width: CGFloat
+    var height: CGFloat
+
+    var body: some View {
+        ForEach(detents.filter { $0 > range.lowerBound && $0 < range.upperBound }, id: \.self) { d in
+            Capsule().fill(.white.opacity(0.3))
+                .frame(width: 2, height: height * 0.22)
+                .offset(x: width * (d - range.lowerBound) / (range.upperBound - range.lowerBound) - 1, y: height * 0.3)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Logique commune des curseurs : valeur continue à l'écran, envoi limité à ~30 Hz,
+/// dernière valeur toujours envoyée au relâcher. Vibration aux butées et aux crans,
+/// qui « aimantent » la valeur quand le doigt passe tout près.
+struct SliderDrag {
+    var live: Double?
+    private var lastSent: Double?
+    private var lastSendTime: TimeInterval = 0
+    private var atEdge = false
+    private var atDetent: Double?
+
+    mutating func update(_ raw: Double, range: ClosedRange<Double>, detents: [Double] = [], value: Binding<Double>, onChange: (Double) -> Void) {
+        // Zone d'aimantation : 2,5 % de la course de part et d'autre du cran
+        let snap = (range.upperBound - range.lowerBound) * 0.025
+        let detent = detents.first { abs(raw - $0) <= snap }
+        live = detent ?? raw
+        let nv = (detent ?? raw).rounded()
+        if nv != value.wrappedValue { value.wrappedValue = nv }
+
+        let edge = nv <= range.lowerBound || nv >= range.upperBound
+        if edge && !atEdge { Haptics.edge() }
+        else if let detent, detent != atDetent, !edge { Haptics.selection() }
+        atEdge = edge
+        atDetent = detent
+
+        let now = ProcessInfo.processInfo.systemUptime
+        if nv != lastSent && (now - lastSendTime > 0.033 || edge) {
+            lastSent = nv; lastSendTime = now
+            onChange(nv)
+        }
+    }
+
+    mutating func end(value: Double, onChange: (Double) -> Void) {
+        if lastSent != value { onChange(value) }
+        live = nil; lastSent = nil; atEdge = false; atDetent = nil
     }
 }
 
@@ -141,25 +226,32 @@ struct TrackSlider: View {
     var range: ClosedRange<Double>
     var track: LinearGradient
     var display: String
+    var detents: [Double] = []
     var onChange: (Double) -> Void
+    @State private var drag = SliderDrag()
 
     var body: some View {
         HStack(spacing: 12) {
             Text(label).font(.caption.weight(.bold)).foregroundStyle(.secondary).frame(width: 18)
             GeometryReader { geo in
-                let p = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+                let p = ((drag.live ?? value) - range.lowerBound) / (range.upperBound - range.lowerBound)
                 ZStack(alignment: .leading) {
-                    Capsule().fill(track)
-                    RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 8, height: 30)
+                    Capsule().fill(track).frame(height: 30)
+                    DetentTicks(detents: detents, range: range, width: geo.size.width, height: 30)
+                        .frame(height: 30)
+                    RoundedRectangle(cornerRadius: 4).fill(.white).frame(width: 8, height: 36)
                         .shadow(color: .black.opacity(0.5), radius: 2)
+                        .scaleEffect(drag.live != nil ? 1.15 : 1)
                         .offset(x: max(0, min(geo.size.width - 8, geo.size.width * p - 4)))
                 }
+                .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { g in
                     let np = max(0, min(1, g.location.x / geo.size.width))
-                    let nv = (range.lowerBound + np * (range.upperBound - range.lowerBound)).rounded()
-                    if nv != value { value = nv; onChange(nv) }
-                })
+                    drag.update(range.lowerBound + np * (range.upperBound - range.lowerBound), range: range, detents: detents,
+                                value: $value, onChange: onChange)
+                }.onEnded { _ in drag.end(value: value, onChange: onChange) })
+                .animation(.spring(duration: 0.2), value: drag.live != nil)
             }
             .frame(height: 38)
             Text(display).font(.caption.monospacedDigit()).foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
@@ -174,32 +266,35 @@ struct Chip: View {
     var active: Bool
     var action: () -> Void
     var body: some View {
-        Button(action: action) {
+        Button { Haptics.selection(); action() } label: {
             Text(title)
                 .font(.subheadline.weight(active ? .semibold : .medium))
                 .padding(.horizontal, 14).frame(height: 36)
                 .foregroundStyle(active ? .black : .white.opacity(0.75))
                 .background(Capsule().fill(active ? .white : .white.opacity(0.1)))
+                .animation(.snappy(duration: 0.2), value: active)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressStyle())
     }
 }
 
+/// Bouton d'action. `active` le met en surbrillance quand il représente l'état courant.
 struct PillButton: View {
     var title: String
     var systemImage: String? = nil
-    var prominent = false
+    var active = false
     var action: () -> Void
     var body: some View {
-        Button(action: action) {
+        Button { Haptics.tap(); action() } label: {
             HStack(spacing: 6) {
                 if let systemImage { Image(systemName: systemImage) }
                 Text(title).lineLimit(1).minimumScaleFactor(0.8)
             }
             .font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity).frame(height: 46)
-            .foregroundStyle(prominent ? .black : .white)
-            .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(prominent ? .white : .white.opacity(0.1)))
+            .foregroundStyle(active ? .black : .white)
+            .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(active ? .white : .white.opacity(0.1)))
+            .animation(.snappy(duration: 0.2), value: active)
         }
         .buttonStyle(PressStyle())
     }
@@ -231,8 +326,10 @@ struct SceneTile: View {
     var scene: LightScene
     var height: CGFloat = 108
     var compact = false
-    var showDelete = false
-    var onDelete: (() -> Void)? = nil
+    /// Scène actuellement appliquée : contour lumineux + coche
+    var selected = false
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 22, style: .continuous) }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -248,17 +345,36 @@ struct SceneTile: View {
             .padding(compact ? 10 : 14)
         }
         .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(.white, lineWidth: selected ? 3 : 0))
         .overlay(alignment: .topTrailing) {
-            if showDelete, let onDelete {
-                Button(action: onDelete) {
-                    Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.white)
-                        .frame(width: 28, height: 28).background(Circle().fill(.black.opacity(0.6)))
-                }
-                .padding(8)
+            if selected {
+                Image(systemName: "checkmark").font(.caption.weight(.heavy)).foregroundStyle(.black)
+                    .frame(width: 24, height: 24).background(Circle().fill(.white))
+                    .shadow(color: .black.opacity(0.3), radius: 3)
+                    .padding(compact ? 6 : 8)
+                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
+        .shadow(color: selected ? (scene.previewColors.first ?? .white).opacity(0.7) : .black.opacity(0.35), radius: selected ? 16 : 14, y: selected ? 4 : 8)
+        .animation(.spring(duration: 0.3), value: selected)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+extension View {
+    /// Croix de suppression affichée en mode édition (hors du bouton de la tuile pour rester cliquable)
+    func deleteBadge(_ shown: Bool, compact: Bool = false, action: @escaping () -> Void) -> some View {
+        overlay(alignment: .topTrailing) {
+            if shown {
+                Button { Haptics.tap(); action() } label: {
+                    Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.white)
+                        .frame(width: 28, height: 28).background(Circle().fill(.black.opacity(0.65)))
+                }
+                .padding(compact ? 6 : 8)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
     }
 }
 
@@ -279,14 +395,13 @@ struct PageHeader: View {
                 }
             }
             Spacer()
-            Button { app.setPower(!app.s.on) } label: {
+            Button { Haptics.impact(); app.setPower(!app.s.on) } label: {
                 Image(systemName: "power").font(.title2.weight(.semibold)).foregroundStyle(.white)
                     .frame(width: 56, height: 56)
                     .background(Circle().fill(app.s.on ? app.glow : .white.opacity(0.08)))
                     .shadow(color: app.s.on ? app.glow.opacity(0.7) : .clear, radius: 16)
             }
             .buttonStyle(PressStyle())
-            .sensoryFeedback(.impact(weight: .medium), trigger: app.s.on)
             .disabled(!app.ble.isConnected)
             .opacity(app.ble.isConnected ? 1 : 0.4)
         }
@@ -315,7 +430,7 @@ struct ConnectCard: View {
                         PillButton(title: "\(f.name)  ·  \(f.rssi) dBm", systemImage: "dot.radiowaves.left.and.right") { app.ble.connect(f.id) }
                     }
                 } else {
-                    Button { app.ble.startScan() } label: {
+                    Button { Haptics.tap(); app.ble.startScan() } label: {
                         HStack {
                             if app.ble.status == .scanning || app.ble.status == .connecting { ProgressView().tint(.black) }
                             Text(app.ble.status == .scanning ? "Recherche…" : "Rechercher le contrôleur")
@@ -342,7 +457,7 @@ struct ConnectCard: View {
     var hint: String {
         switch app.ble.status {
         case .bluetoothOff: return "Active le Bluetooth dans le Centre de contrôle."
-        case .unauthorized: return "Autorise le Bluetooth dans Réglages → Clio Ambient."
+        case .unauthorized: return "Autorise le Bluetooth dans Réglages → AURA."
         case .connecting: return "Le contrôleur doit être allumé et à portée."
         default: return app.ble.found.count > 1 ? "Plusieurs contrôleurs trouvés, choisis le tien :" : "Allume le contrôleur, puis lance la recherche."
         }

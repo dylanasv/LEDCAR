@@ -3,7 +3,6 @@ import SwiftUI
 struct MusicView: View {
     @EnvironmentObject var app: AppState
     @State private var sens: Double = 90
-    @State private var pulse = false
 
     var body: some View {
         ScrollView {
@@ -16,24 +15,27 @@ struct MusicView: View {
                     equalizer.frame(height: 56)
 
                     HStack(spacing: 24) {
-                        roundButton("chevron.left") { app.setMic(app.s.micMode - 1) }
+                        roundButton("chevron.left", disabled: app.s.micMode <= 1) { app.setMic(app.s.micMode - 1) }
                         VStack(spacing: 0) {
                             Text("\(app.s.micMode)").font(.system(size: 48, weight: .bold, design: .rounded)).contentTransition(.numericText())
                             Text("MODE").font(.caption.weight(.semibold)).tracking(1).foregroundStyle(.secondary)
                         }
                         .frame(minWidth: 100)
-                        roundButton("chevron.right") { app.setMic(app.s.micMode + 1) }
+                        roundButton("chevron.right", disabled: app.s.micMode >= 255) { app.setMic(app.s.micMode + 1) }
                     }
                     .animation(.snappy, value: app.s.micMode)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
                         ForEach(1...24, id: \.self) { n in
-                            Button { app.setMic(n) } label: {
+                            let on = app.s.mode == .music && app.s.micMode == n
+                            Button { Haptics.selection(); app.setMic(n) } label: {
                                 Text("\(n)").font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).frame(height: 38)
-                                    .foregroundStyle(app.s.micMode == n ? .black : .white.opacity(0.75))
-                                    .background(Capsule().fill(app.s.micMode == n ? .white : .white.opacity(0.1)))
+                                    .foregroundStyle(on ? .black : .white.opacity(0.75))
+                                    .background(Capsule().fill(on ? .white : .white.opacity(0.1)))
+                                    .animation(.snappy(duration: 0.2), value: on)
                             }
                             .buttonStyle(PressStyle())
+                            .accessibilityAddTraits(on ? .isSelected : [])
                         }
                     }
 
@@ -47,10 +49,9 @@ struct MusicView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionHeader(title: "Styles simples · canal RGB")
                     HStack(spacing: 8) {
-                        PillButton(title: "Saut") { app.voiceRGB(0) }
-                        PillButton(title: "Souffle") { app.voiceRGB(1) }
-                        PillButton(title: "Flash") { app.voiceRGB(2) }
-                        PillButton(title: "Fondu") { app.voiceRGB(3) }
+                        ForEach(Array(["Saut", "Souffle", "Flash", "Fondu"].enumerated()), id: \.offset) { i, name in
+                            PillButton(title: name, active: app.s.rgbVoice == i) { app.voiceRGB(i) }
+                        }
                     }
                 }
                 .card()
@@ -58,7 +59,8 @@ struct MusicView: View {
             .padding(.horizontal, 16).padding(.bottom, 30)
         }
         .scrollIndicators(.hidden)
-        .onAppear { sens = Double(app.s.sensitivity); pulse = true }
+        .onAppear { sens = Double(app.s.sensitivity) }
+        .onChange(of: app.s.sensitivity) { _, v in sens = Double(v) }
     }
 
     private var equalizer: some View {
@@ -75,12 +77,13 @@ struct MusicView: View {
         }
     }
 
-    private func roundButton(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func roundButton(_ icon: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button { Haptics.selection(); action() } label: {
             Image(systemName: icon).font(.title3.weight(.bold)).foregroundStyle(.white)
                 .frame(width: 56, height: 56).background(Circle().fill(.white.opacity(0.1)))
         }
         .buttonStyle(PressStyle())
-        .sensoryFeedback(.selection, trigger: app.s.micMode)
+        .disabled(disabled)
+        .opacity(disabled ? 0.35 : 1)
     }
 }

@@ -58,10 +58,20 @@ enum SceneLibrary {
     private static func color(_ id: String, _ name: String, _ hex: String, _ bri: Int, _ grad: [String]) -> LightScene {
         LightScene(id: id, name: name, category: "Unies", mode: .color, hex: hex, brightness: bri, gradient: grad)
     }
-    private static func grad(_ id: String, _ name: String, _ colors: [String], style: Int = 3, speed: Int = 30, bri: Int = 90, cat: String = "Dégradés") -> LightScene {
+    private static func grad(_ id: String, _ name: String, _ colors: [String], style: Int = 3, speed: Int = 100, bri: Int = 90, cat: String = "Dégradés") -> LightScene {
         LightScene(id: id, name: name, category: cat, mode: .custom, colors: colors, style: style, direction: 0, speed: speed, brightness: bri)
     }
-    private static func fx(_ id: String, _ name: String, _ effect: Int, speed: Int, bri: Int = 100) -> LightScene {
+    /// Étoile filante : style « Rideau » de l'effet personnalisé, qui recouvre la bande de gauche à droite
+    /// case après case. On alterne fond (35 % de la couleur) et lueur (100 %) pour que la vague lumineuse
+    /// revienne à chaque cycle — avec des cases de fond identiques à la suite, les passages seraient invisibles.
+    private static func star(_ id: String, _ name: String, _ peak: String) -> LightScene {
+        let c = ColorMath.hexToRGB(peak) ?? RGB(r: 255, g: 0, b: 0)
+        let base = ColorMath.rgbToHex(RGB(r: Int(Double(c.r) * 0.35), g: Int(Double(c.g) * 0.35), b: Int(Double(c.b) * 0.35)))
+        return LightScene(id: id, name: name, category: "Étoiles filantes", mode: .custom,
+                          colors: Array(repeating: [base, peak], count: 4).flatMap { $0 }, style: 5, direction: 0,
+                          speed: 100, brightness: 100, gradient: [base, base, peak, base])
+    }
+    private static func fx(_ id: String, _ name: String, _ effect: Int, speed: Int = 100, bri: Int = 100) -> LightScene {
         LightScene(id: id, name: name, category: "Animées", mode: .effect, effect: effect, speed: speed, brightness: bri)
     }
 
@@ -75,25 +85,38 @@ enum SceneLibrary {
         color("s-rose", "Rose néon", "#FF1F8F", 80, ["#FF8CC6", "#FF1F8F", "#6B003A"]),
         color("s-cyan", "Bleu arctique", "#00C8FF", 75, ["#BFF1FF", "#00C8FF", "#004A66"]),
 
-        grad("s-sunset", "Coucher de soleil", ["#FF4E00", "#FF0F6A", "#8A00FF"], speed: 35),
-        grad("s-aurora", "Aurore boréale", ["#00FF9C", "#00D4FF", "#7A2BFF"], speed: 25, bri: 85),
+        grad("s-sunset", "Coucher de soleil", ["#FF4E00", "#FF0F6A", "#8A00FF"]),
+        grad("s-aurora", "Aurore boréale", ["#00FF9C", "#00D4FF", "#7A2BFF"], bri: 85),
         grad("s-ocean", "Océan", ["#0030FF", "#00A2FF", "#00FFD5"], bri: 85),
-        grad("s-miami", "Miami", ["#FF2EA6", "#B14BFF", "#00E5FF"], speed: 35),
-        grad("s-cyber", "Cyberpunk", ["#FF00C8", "#6A00FF", "#00F0FF"], speed: 45, bri: 100),
+        grad("s-miami", "Miami", ["#FF2EA6", "#B14BFF", "#00E5FF"]),
+        grad("s-cyber", "Cyberpunk", ["#FF00C8", "#6A00FF", "#00F0FF"], bri: 100),
         grad("s-lave", "Lave", ["#FF0000", "#FF4D00", "#FF9900"], bri: 100),
-        grad("s-foret", "Forêt", ["#00A84F", "#3CFF5A", "#C8FF00"], speed: 25, bri: 80),
+        grad("s-foret", "Forêt", ["#00A84F", "#3CFF5A", "#C8FF00"], bri: 80),
         grad("s-bonbon", "Bonbon", ["#FF7AD9", "#B37AFF", "#7AD7FF"], bri: 80),
-        grad("s-glace", "Glacier", ["#FFFFFF", "#9FE8FF", "#2A7BFF"], speed: 25, bri: 80),
+        grad("s-glace", "Glacier", ["#FFFFFF", "#9FE8FF", "#2A7BFF"], bri: 80),
         grad("s-braise", "Braise", ["#FF2A00", "#FF7A00", "#FFC400"], style: 1),
-        grad("s-royal", "Royal", ["#1A2BFF", "#7A00FF", "#FFC400"], speed: 25, bri: 85),
-        grad("s-pastel", "Pastel", ["#FFB3C7", "#FFE29A", "#B5F5C8", "#A8D8FF"], speed: 25, bri: 70),
+        grad("s-royal", "Royal", ["#1A2BFF", "#7A00FF", "#FFC400"], bri: 85),
+        grad("s-pastel", "Pastel", ["#FFB3C7", "#FFE29A", "#B5F5C8", "#A8D8FF"], bri: 70),
 
-        fx("s-rainbow", "Arc-en-ciel", EffectCatalog.autoID, speed: 40),
-        fx("s-vague", "Vague bleue", 165, speed: 45, bri: 90),
-        fx("s-k2000", "Scanner rouge", 101, speed: 60),
-        fx("s-rideau", "Rideau 7 couleurs", 57, speed: 50),
-        fx("s-flux", "Flux jaune · cyan", 51, speed: 50, bri: 90),
-        grad("s-gyro", "Gyrophare", ["#FF0000", "#0030FF"], style: 2, speed: 70, bri: 100, cat: "Animées"),
+        // Effet 1 « Dreaming » : l'arc-en-ciel qui défile de l'appli d'origine ; le canal RGB passe en fondu 7 couleurs
+        fx("s-rainbow", "Arc-en-ciel", 1),
+        fx("s-auto", "Tous les effets", EffectCatalog.autoID),
+        fx("s-vague", "Vague bleue", 165, bri: 90),
+        fx("s-k2000", "Scanner rouge", 101),
+        fx("s-rideau", "Rideau 7 couleurs", 57),
+        fx("s-flux", "Flux jaune · cyan", 51, bri: 90),
+        grad("s-gyro", "Gyrophare", ["#FF0000", "#0030FF"], style: 2, bri: 100, cat: "Animées"),
+
+        star("s-star-rouge", "Étoile rouge", "#FF0000"),
+        star("s-star-orange", "Étoile orange", "#FF6A00"),
+        star("s-star-ambre", "Étoile ambrée", "#FFB000"),
+        star("s-star-vert", "Étoile verte", "#00FF40"),
+        star("s-star-cyan", "Étoile cyan", "#00FFFF"),
+        star("s-star-bleu", "Étoile bleue", "#0030FF"),
+        star("s-star-violet", "Étoile violette", "#8A00FF"),
+        star("s-star-magenta", "Étoile magenta", "#FF00FF"),
+        star("s-star-rose", "Étoile rose", "#FF1F8F"),
+        star("s-star-blanc", "Étoile blanche", "#FFFFFF"),
 
         LightScene(id: "s-soiree", name: "Soirée", category: "Musique", mode: .music, micMode: 1, sensitivity: 95, brightness: 100, gradient: ["#6A11CB", "#FF2A8A"]),
         LightScene(id: "s-club", name: "Club", category: "Musique", mode: .music, micMode: 2, sensitivity: 100, brightness: 100, gradient: ["#00E5FF", "#6A00FF", "#FF00C8"]),

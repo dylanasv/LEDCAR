@@ -6,6 +6,7 @@ struct AdvancedView: View {
     @State private var sat: Double = 100
     @State private var bri: Double = 100
     @State private var kelvin: Double = 6500
+    @State private var speed: Double = 100
     @State private var r: Double = 255
     @State private var g: Double = 0
     @State private var b: Double = 0
@@ -32,10 +33,11 @@ struct AdvancedView: View {
         .onAppear(perform: syncFromState)
         .onChange(of: app.s.hex) { _, _ in syncFromState() }
         .onChange(of: app.s.brightness) { _, v in bri = Double(v) }
+        .onChange(of: app.s.speed) { _, v in speed = Double(v) }
     }
 
     private func syncFromState() {
-        hue = app.s.hue; sat = app.s.sat; bri = Double(app.s.brightness)
+        hue = app.s.hue; sat = app.s.sat; bri = Double(app.s.brightness); speed = Double(app.s.speed)
         let c = app.rgb; r = Double(c.r); g = Double(c.g); b = Double(c.b)
         if !hexFocused { hexText = app.s.hex }
     }
@@ -44,17 +46,17 @@ struct AdvancedView: View {
     private var wheelCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Roue chromatique")
-            ColorWheel().frame(maxWidth: .infinity).padding(.vertical, 6)
+            ColorWheel(maxSize: 290).padding(.vertical, 4)
 
             TrackSlider(label: "T", value: $hue, range: 0...359,
                         track: LinearGradient(colors: Color.hueStops, startPoint: .leading, endPoint: .trailing),
-                        display: "\(Int(hue))°") { app.setHueSat($0, sat) }
+                        display: "\(Int(hue))°", detents: ColorWheel.marks.map(\.hue).filter { $0 > 0 }) { app.setHueSat($0, sat) }
             TrackSlider(label: "S", value: $sat, range: 0...100,
                         track: LinearGradient(colors: [.white, Color.hue(hue)], startPoint: .leading, endPoint: .trailing),
-                        display: "\(Int(sat)) %") { app.setHueSat(hue, $0) }
+                        display: "\(Int(sat)) %", detents: [25, 50, 75]) { app.setHueSat(hue, $0) }
             TrackSlider(label: "L", value: $bri, range: 1...100,
                         track: LinearGradient(colors: [.black, .white], startPoint: .leading, endPoint: .trailing),
-                        display: "\(Int(bri)) %") { app.setBrightness(Int($0)) }
+                        display: "\(Int(bri)) %", detents: Detents.percent) { app.setBrightness(Int($0)) }
             TrackSlider(label: "K", value: $kelvin, range: 1800...10000,
                         track: LinearGradient(colors: [Color(hex: "#FF8A1C"), Color(hex: "#FFD6A5"), .white, Color(hex: "#CFE0FF"), Color(hex: "#9FBFFF")], startPoint: .leading, endPoint: .trailing),
                         display: "\(Int(kelvin))K") { app.setHex(ColorMath.rgbToHex(ColorMath.kelvinToRGB($0))) }
@@ -83,10 +85,12 @@ struct AdvancedView: View {
                     .padding(.horizontal, 14).frame(height: 46)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.08)))
                     .onSubmit(applyHex)
-                Button("OK", action: applyHex)
-                    .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-                    .frame(width: 56, height: 46)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.12)))
+                Button(action: applyHex) {
+                    Text("OK").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                        .frame(width: 56, height: 46)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.12)))
+                }
+                .buttonStyle(PressStyle())
             }
         }
         .card()
@@ -95,7 +99,11 @@ struct AdvancedView: View {
     private func applyHex() {
         var t = hexText.trimmingCharacters(in: .whitespaces)
         if !t.hasPrefix("#") { t = "#" + t }
-        if ColorMath.hexToRGB(t) != nil { app.setHex(t); hexFocused = false } else { app.flash("Code couleur invalide (ex. #FF3300)") }
+        if ColorMath.hexToRGB(t) != nil {
+            Haptics.tap(); app.setHex(t); hexFocused = false
+        } else {
+            Haptics.edge(); app.flash("Code couleur invalide (ex. #FF3300)")
+        }
     }
 
     // MARK: Zones
@@ -104,8 +112,8 @@ struct AdvancedView: View {
             SectionHeader(title: "Zones")
             Text("Le contrôleur a deux sorties pilotables séparément : **Symphonie** (bandes adressables, effets) et **RGB** (bandes simples). « Identifier » fait clignoter les LED branchées sur chaque sortie.")
                 .font(.footnote).foregroundStyle(.secondary)
-            Text("Les pages Couleur et Scènes pilotent :").font(.footnote).foregroundStyle(.secondary)
-            Picker("Cible", selection: Binding(get: { app.s.target }, set: { app.setTarget($0) })) {
+            Text("Couleurs, effets, musique et scènes pilotent :").font(.footnote).foregroundStyle(.secondary)
+            Picker("Cible", selection: Binding(get: { app.s.target }, set: { Haptics.selection(); app.setTarget($0) })) {
                 ForEach(LEDZone.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -125,11 +133,13 @@ struct AdvancedView: View {
                 ForEach(0..<8, id: \.self) { i in
                     let c = app.s.custom.slots[i]
                     Button {
-                        app.s.custom.slots[i] = c == nil ? app.s.hex : nil
+                        Haptics.selection()
+                        withAnimation(.snappy(duration: 0.2)) { app.s.custom.slots[i] = c == nil ? app.s.hex : nil }
                     } label: {
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
                             .fill(c.map { Color(hex: $0) } ?? Color.white.opacity(0.07))
                             .aspectRatio(1, contentMode: .fit)
+                            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(.white.opacity(c == nil ? 0.15 : 0.35), lineWidth: 1))
                             .overlay { if c == nil { Image(systemName: "plus").foregroundStyle(.secondary) } }
                     }
                     .buttonStyle(PressStyle())
@@ -137,23 +147,33 @@ struct AdvancedView: View {
             }
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(CustomStyle.all) { st in
-                    Button { app.s.custom.style = st.id } label: {
+                    let on = app.s.custom.style == st.id
+                    Button { Haptics.selection(); app.s.custom.style = st.id } label: {
                         Text(st.name).font(.caption.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.8)
                             .frame(maxWidth: .infinity).frame(height: 36)
-                            .foregroundStyle(app.s.custom.style == st.id ? .black : .white.opacity(0.8))
-                            .background(Capsule().fill(app.s.custom.style == st.id ? .white : .white.opacity(0.1)))
+                            .foregroundStyle(on ? .black : .white.opacity(0.8))
+                            .background(Capsule().fill(on ? .white : .white.opacity(0.1)))
+                            .animation(.snappy(duration: 0.2), value: on)
                     }
                     .buttonStyle(PressStyle())
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
+            GlassSlider(title: "Vitesse", systemImage: "speedometer", value: $speed, tint: app.glow, height: 42,
+                        detents: Detents.percent) { app.setSpeed(Int($0)) }
             HStack(spacing: 8) {
                 Picker("Sens", selection: $app.s.custom.direction) {
                     Text("→ Avant").tag(0); Text("← Arrière").tag(1)
                 }
                 .pickerStyle(.segmented)
-                Button { app.playCustom() } label: {
-                    Text("Lancer").font(.subheadline.weight(.semibold)).foregroundStyle(.black)
-                        .padding(.horizontal, 18).frame(height: 34).background(Capsule().fill(.white))
+                Button { Haptics.tap(); app.playCustom() } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: app.s.mode == .custom && app.s.on ? "checkmark" : "play.fill").font(.caption.weight(.bold))
+                        Text(app.s.mode == .custom && app.s.on ? "Actif" : "Lancer")
+                    }
+                    .font(.subheadline.weight(.semibold)).foregroundStyle(.black)
+                    .padding(.horizontal, 16).frame(height: 34).background(Capsule().fill(.white))
+                    .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(PressStyle())
             }
@@ -171,6 +191,16 @@ struct AdvancedView: View {
                     Text("Allume en rouge à 100 % à chaque connexion").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .tint(.green)
+            .padding(.vertical, 8)
+            Divider().opacity(0.3)
+            Toggle(isOn: $app.s.settings.haptics) {
+                VStack(alignment: .leading) {
+                    Text("Retour haptique").font(.body.weight(.semibold))
+                    Text("Vibrations légères au toucher").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .tint(.green)
             .padding(.vertical, 8)
             Divider().opacity(0.3)
             HStack {
@@ -236,9 +266,9 @@ struct ZoneRow: View {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Toggle("", isOn: Binding(get: { z.on }, set: { app.setZonePower(key, $0) })).labelsHidden().tint(.green)
+                Toggle("", isOn: Binding(get: { z.on }, set: { Haptics.selection(); app.setZonePower(key, $0) })).labelsHidden().tint(.green)
             }
-            GlassSlider(title: "Luminosité", systemImage: "sun.max", value: $bri, tint: Color(hex: z.hex), height: 40) { app.setZoneBrightness(key, Int($0)) }
+            GlassSlider(title: "Luminosité", systemImage: "sun.max", value: $bri, tint: Color(hex: z.hex), height: 40, detents: Detents.percent) { app.setZoneBrightness(key, Int($0)) }
             HStack(spacing: 8) {
                 PillButton(title: "Couleur actuelle", systemImage: "paintbrush.fill") { app.setZoneColorToCurrent(key) }
                 PillButton(title: "Identifier", systemImage: "lightbulb.max") { app.identify(key) }
@@ -247,43 +277,7 @@ struct ZoneRow: View {
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.white.opacity(0.05)))
         .onAppear { bri = Double(z.brightness) }
-    }
-}
-
-/// Roue chromatique : angle = teinte, distance au centre = saturation.
-struct ColorWheel: View {
-    @EnvironmentObject var app: AppState
-    @State private var dragging = false
-
-    var body: some View {
-        GeometryReader { geo in
-            let size = min(geo.size.width, 270)
-            let r = size / 2
-            let a = app.s.hue * .pi / 180
-            let d = r * app.s.sat / 100
-            ZStack {
-                Circle().fill(AngularGradient(colors: Color.hueStops, center: .center, startAngle: .degrees(0), endAngle: .degrees(360)))
-                Circle().fill(RadialGradient(colors: [.white, .white.opacity(0)], center: .center, startRadius: 0, endRadius: r))
-                Circle().fill(.black).opacity((100 - Double(app.s.brightness)) / 100 * 0.7)
-                Circle().fill(Color(hex: app.s.hex))
-                    .overlay(Circle().strokeBorder(.white, lineWidth: 3))
-                    .frame(width: 34, height: 34)
-                    .scaleEffect(dragging ? 1.25 : 1)
-                    .shadow(color: .black.opacity(0.5), radius: 5)
-                    .offset(x: d * cos(a), y: d * sin(a))
-            }
-            .frame(width: size, height: size)
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 10)
-            .contentShape(Circle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { g in
-                dragging = true
-                let dx = g.location.x - r, dy = g.location.y - r
-                app.setHueSat(atan2(dy, dx) * 180 / .pi, min(100, hypot(dx, dy) / r * 100))
-            }.onEnded { _ in dragging = false })
-            .animation(.spring(duration: 0.2), value: dragging)
-            .frame(maxWidth: .infinity)
-        }
-        .frame(height: 270)
+        .onChange(of: z.brightness) { _, v in bri = Double(v) }
     }
 }
 

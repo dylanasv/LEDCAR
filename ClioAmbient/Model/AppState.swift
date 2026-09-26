@@ -29,21 +29,23 @@ struct PersistedState: Codable {
     var brightness = 100
     var mode: LightMode = .color
     var effect: Int? = nil
-    var speed = 50
+    var speed = 100
     var micMode = 1
     var sensitivity = 90
-    var target: LEDZone = .dmx
+    var target: LEDZone = .sync
     var zones: [String: ZoneState] = ["dmx": ZoneState(hex: "#FF0000"), "rgb": ZoneState(hex: "#0050FF")]
     var custom = CustomEffect()
     var settings = AppSettings()
     var scenes: [LightScene] = []
     var favorites: [LightScene?] = [SceneLibrary.suggestions[0], SceneLibrary.suggestions[8], SceneLibrary.suggestions[20]]
+    /// Dernier style musical choisi pour le canal RGB (optionnel : les anciennes sauvegardes restent lisibles)
+    var rgbVoice: Int? = nil
 }
 
 /// État de l'appli + envoi des commandes au contrôleur.
 final class AppState: ObservableObject {
     let ble = BLEManager()
-    @Published var s: PersistedState { didSet { scheduleSave() } }
+    @Published var s: PersistedState { didSet { Haptics.enabled = s.settings.haptics; scheduleSave() } }
     @Published var toast: String?
 
     private var saveWork: DispatchWorkItem?
@@ -53,9 +55,13 @@ final class AppState: ObservableObject {
     init() {
         if let d = UserDefaults.standard.data(forKey: Self.storeKey), let st = try? JSONDecoder().decode(PersistedState.self, from: d) {
             s = st
+            // Les favoris sont des copies : on les remet à jour quand la suggestion d'origine a changé
+            let lib = Dictionary(uniqueKeysWithValues: SceneLibrary.suggestions.map { ($0.id, $0) })
+            s.favorites = s.favorites.map { f in f.flatMap { lib[$0.id] } ?? f }
         } else {
             s = PersistedState()
         }
+        Haptics.enabled = s.settings.haptics
         ble.onConnected = { [weak self] in self?.didConnect() }
         // Relaye les changements du BLE pour rafraîchir l'UI
         ble.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
@@ -93,7 +99,7 @@ final class AppState: ObservableObject {
 
     private func didConnect() {
         if s.settings.applyDefaultOnConnect {
-            s.on = true; s.mode = .color; s.brightness = 100
+            s.on = true; s.mode = .color; s.brightness = 100; s.speed = 100
             setHex("#FF0000", send: false)
         }
         resendState()
@@ -104,12 +110,57 @@ final class AppState: ObservableObject {
         ble.send("power", LED.power(s.on, s.target))
         switch s.mode {
         case .effect:
-            if let e = s.effect { ble.send("effect", LED.effect(e)); ble.send("speed", LED.speed(s.speed)) }
-        case .music: ble.send("voice", LED.voice(s.micMode))
+            if let e = s.effect {
+                if drivesDMX { ble.send("effect", LED.effect(e)); ble.send("speed", LED.speed(s.speed)) }
+                sendRGBCompanion()
+            }
+        case .music:
+            if drivesDMX { ble.send("voice", LED.voice(s.micMode)) }
+            sendRGBCompanion()
         case .custom: playCustom(silent: true)
-        case .color: let c = rgb; ble.send("color", LED.color(c.r, c.g, c.b, s.target))
+        case .color:
+            let c = rgb
+            ble.send("color", LED.color(c.r, c.g, c.b, s.target))
+            if s.target == .sync { ble.send("rgbColor", LED.color(c.r, c.g, c.b, .rgb)) }
+            rgbAnimated = false
         }
         ble.send("bri", LED.brightness(s.brightness, s.target))
+    }
+
+    // MARK: - Canal RGB
+
+    /// La cible choisie dans Avancé › Zones s'applique à tout (couleur, effets, dégradés, musique, scènes).
+    var drivesDMX: Bool { s.target != .rgb }
+    var drivesRGB: Bool { s.target != .dmx }
+
+    /// Vrai quand le canal RGB joue un programme animé ou musical : la trame couleur « les deux » ne suffit
+    /// alors pas forcément à l'arrêter, on lui envoie aussi sa propre trame couleur.
+    private var rgbAnimated = false
+
+    /// Les effets et dégradés n'existent que sur la Symphonie : le canal RGB (une seule couleur à la fois)
+    /// reçoit l'équivalent le plus proche, sinon il garderait la couleur précédente.
+    var rgbCompanion: RGBCompanion? {
+        switch s.mode {
+        case .color: return nil
+        case .music: return .music(s.rgbVoice ?? 0)
+        case .effect: return EffectCatalog.rgbCompanion(for: s.effect ?? EffectCatalog.autoID)
+        case .custom:
+            let cols = s.custom.slots.compactMap { $0 }.compactMap(ColorMath.hexToRGB)
+            // La couleur la plus lumineuse : pour une étoile filante c'est la lueur, pas le fond atténué
+            return cols.max { $0.r + $0.g + $0.b < $1.r + $1.g + $1.b }.map(RGBCompanion.color)
+        }
+    }
+
+    private func sendRGBCompanion() {
+        guard drivesRGB, let c = rgbCompanion else { return }
+        switch c {
+        case .color(let v):
+            ble.send("rgbColor", LED.color(v.r, v.g, v.b, .rgb)); rgbAnimated = false
+        case .mode(let m):
+            ble.send("rgbMode", LED.modeRGB(m)); ble.send("rgbSpeed", LED.speedRGB(s.speed)); rgbAnimated = true
+        case .music(let n):
+            ble.send("voiceRgb", LED.voiceRGB(n)); rgbAnimated = true
+        }
     }
 
     // MARK: - Commandes
@@ -147,9 +198,14 @@ final class AppState: ObservableObject {
         if let hue { n.hue = hue }
         if let sat { n.sat = sat }
         n.mode = .color
+        if send && n.target != .dmx { n.rgbVoice = nil }
         if send && !n.on { n.on = true; ble.send("power", LED.power(true, n.target)) }
         s = n
-        if send { ble.send("color", LED.color(c.r, c.g, c.b, n.target)) }
+        if send {
+            ble.send("color", LED.color(c.r, c.g, c.b, n.target))
+            if rgbAnimated && n.target == .sync { ble.send("rgbColor", LED.color(c.r, c.g, c.b, .rgb)) }
+            if n.target != .dmx { rgbAnimated = false }
+        }
     }
 
     func setBrightness(_ p: Int) {
@@ -162,18 +218,23 @@ final class AppState: ObservableObject {
     }
 
     func playEffect(_ id: Int) {
+        ensureOn()
         s.effect = id; s.mode = .effect
-        ble.send("effect", LED.effect(id)); ble.send("speed", LED.speed(s.speed)); ensureOn()
+        if drivesDMX { ble.send("effect", LED.effect(id)); ble.send("speed", LED.speed(s.speed)) }
+        sendRGBCompanion()
     }
 
     func setSpeed(_ p: Int) {
         s.speed = max(1, min(100, p))
-        ble.send("speed", LED.speed(s.speed))
+        if drivesDMX { ble.send("speed", LED.speed(s.speed)) }
+        if drivesRGB, case .mode = rgbCompanion { ble.send("rgbSpeed", LED.speedRGB(s.speed)) }
     }
 
     func setMic(_ n: Int) {
+        ensureOn()
         s.micMode = max(1, min(255, n)); s.mode = .music
-        ble.send("voice", LED.voice(s.micMode)); ensureOn()
+        if drivesDMX { ble.send("voice", LED.voice(s.micMode)) }
+        sendRGBCompanion()
     }
 
     func setSensitivity(_ v: Int) {
@@ -181,7 +242,7 @@ final class AppState: ObservableObject {
         ble.send("sens", LED.sensitivity(s.sensitivity)); ble.send("sensRgb", LED.sensitivityRGB(s.sensitivity))
     }
 
-    func voiceRGB(_ n: Int) { ble.send("voiceRgb", LED.voiceRGB(n)); ensureOn() }
+    func voiceRGB(_ n: Int) { ensureOn(); s.rgbVoice = n; ble.send("voiceRgb", LED.voiceRGB(n)); rgbAnimated = true }
 
     func setTarget(_ z: LEDZone) { s.target = z; resendState() }
 
@@ -220,19 +281,26 @@ final class AppState: ObservableObject {
     func playCustom(silent: Bool = false) {
         let cols = s.custom.slots.compactMap { $0 }.compactMap(ColorMath.hexToRGB)
         guard !cols.isEmpty else { flash("Ajoute au moins une couleur"); return }
-        for (i, c) in cols.enumerated() {
-            ble.send("cc\(i)", LED.customColor(index: i + 1, c.r, c.g, c.b, count: cols.count))
+        ensureOn()
+        s.mode = .custom
+        if drivesDMX {
+            for (i, c) in cols.enumerated() {
+                ble.send("cc\(i)", LED.customColor(index: i + 1, c.r, c.g, c.b, count: cols.count))
+            }
+            ble.send("cmode", LED.customMode(s.custom.style))
+            ble.send("cdir", LED.direction(s.custom.direction))
+            ble.send("speed", LED.speed(s.speed))
         }
-        ble.send("cmode", LED.customMode(s.custom.style))
-        ble.send("cdir", LED.direction(s.custom.direction))
-        s.mode = .custom; ensureOn()
+        sendRGBCompanion()
         if !silent { flash("Effet personnalisé lancé") }
     }
 
     // MARK: - Scènes
 
     func apply(_ sc: LightScene) {
-        s.on = true; ble.send("power", LED.power(true, s.target))
+        // Pas de trame « allumer » si c'est déjà allumé : certains contrôleurs rechargent leur dernier
+        // mode à l'allumage, ce qui écrasait la couleur ou l'effet envoyé juste derrière.
+        ensureOn()
         switch sc.mode {
         case .color: setHex(sc.hex ?? "#FF0000")
         case .effect:
@@ -250,6 +318,21 @@ final class AppState: ObservableObject {
         }
         setBrightness(sc.brightness)
         flash("« \(sc.name) »")
+    }
+
+    /// Vrai si la scène correspond à ce que font les LED en ce moment.
+    /// On compare le contenu (couleur, effet, mode micro, dégradé) et pas les réglages fins
+    /// (luminosité, vitesse) : baisser la luminosité ne « désélectionne » pas la scène.
+    func isActive(_ sc: LightScene) -> Bool {
+        guard s.on else { return false }
+        switch sc.mode {
+        case .color: return s.mode == .color && s.hex.uppercased() == (sc.hex ?? "").uppercased()
+        case .effect: return s.mode == .effect && s.effect == (sc.effect ?? EffectCatalog.autoID)
+        case .music: return s.mode == .music && s.micMode == (sc.micMode ?? 1)
+        case .custom:
+            return s.mode == .custom && s.custom.slots.compactMap { $0 } == (sc.colors ?? [])
+                && s.custom.style == (sc.style ?? 3) && s.custom.direction == (sc.direction ?? 0)
+        }
     }
 
     func snapshot(named name: String) -> LightScene {
