@@ -42,9 +42,6 @@ struct PersistedState: Codable {
     var rgbVoice: Int? = nil
     /// Passage unique à la cible « Les deux » quand les effets ont commencé à piloter aussi le canal RGB
     var targetMigrated: Bool? = nil
-    /// Réglage des barres Symphonie (nil tant qu'il n'a jamais été envoyé depuis l'appli)
-    var stripPixels: Int? = nil
-    var colorOrder: Int? = nil
 }
 
 /// État de l'appli + envoi des commandes au contrôleur.
@@ -256,15 +253,6 @@ final class AppState: ObservableObject {
     }
 
     func voiceRGB(_ n: Int) { ensureOn(); s.rgbVoice = n; ble.send("voiceRgb", LED.voiceRGB(n)); rgbAnimated = true }
-
-    /// Envoie le nombre de LED et l'ordre des couleurs, puis relance l'effet en cours pour voir le résultat.
-    func sendStripConfig(pixels: Int, order: Int) {
-        let n = max(1, min(255, pixels))
-        s.stripPixels = n; s.colorOrder = order
-        ble.send("spi", LED.configSPI(pixels: n, order: order))
-        if s.mode == .effect, let e = s.effect { playEffect(e) }
-        flash("Barres : \(n) LED")
-    }
 
     func setTarget(_ z: LEDZone) { s.target = z; resendState() }
 

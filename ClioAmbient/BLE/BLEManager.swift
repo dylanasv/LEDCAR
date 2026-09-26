@@ -50,6 +50,17 @@ final class BLEManager: NSObject, ObservableObject {
     private let frameGap: TimeInterval = 0.04
     /// Écriture acquittée en attente (mode « avec réponse »)
     private var awaitingAck = false
+    private var writeStartedAt = Date.distantPast
+
+    /// Commandes « en continu » (roue, teinte maintenue, curseurs) : au plus une trame par intervalle.
+    /// Un tap isolé passe tout de suite, mais un flot de 10-20 couleurs/s fait prendre du retard au contrôleur,
+    /// qui les exécute toutes l'une après l'autre. La dernière valeur part toujours.
+    private static let liveInterval: TimeInterval = 0.12
+    private static let liveKeys: Set<String> = ["color", "rgbColor", "bri", "speed", "rgbSpeed", "sens", "sensRgb"]
+    /// Réglages qui persistent d'un mode à l'autre : inutile de renvoyer la même valeur (une scène en envoie beaucoup)
+    private static let stickyKeys: Set<String> = ["bri", "speed", "cdir", "rgbSpeed", "sens", "sensRgb"]
+    private var lastSentAt: [String: Date] = [:]
+    private var lastSent: [String: Data] = [:]
 
     private let lastDeviceKey = "ble.lastDevice"
 
@@ -116,6 +127,7 @@ final class BLEManager: NSObject, ObservableObject {
     /// couleur → effet → couleur enverrait la couleur avant l'effet, et l'effet l'emporterait.
     func send(_ key: String, _ data: Data) {
         guard data.count == 9 else { log("✖ trame invalide \(key)"); return }
+        if Self.stickyKeys.contains(key), pending[key] == nil, lastSent[key] == data { return }
         if pending[key] != nil { pendingKeys.removeAll { $0 == key } }
         pendingKeys.append(key)
         pending[key] = data
@@ -133,7 +145,20 @@ final class BLEManager: NSObject, ObservableObject {
         guard let p = peripheral, let c = writeChar, status == .connected else {
             pending.removeAll(); pendingKeys.removeAll(); return
         }
-        guard !pendingKeys.isEmpty else { return }
+        guard let head = pendingKeys.first else { return }
+        // Trame « en continu » envoyée il y a trop peu de temps : on attend plutôt que de la doubler,
+        // pour ne jamais changer l'ordre des ordres (une couleur ne doit pas passer après un effet choisi ensuite)
+        if Self.liveKeys.contains(head), let t = lastSentAt[head] {
+            let wait = Self.liveInterval - Date().timeIntervalSince(t)
+            if wait > 0 {
+                pumping = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                    self?.pumping = false
+                    self?.pump()
+                }
+                return
+            }
+        }
         let type = writeType
         // Tampon d'émission iOS plein : on attend `peripheralIsReady` au lieu de laisser la trame se perdre
         if type == .withoutResponse && !p.canSendWriteWithoutResponse { return }
@@ -141,9 +166,11 @@ final class BLEManager: NSObject, ObservableObject {
         let key = pendingKeys.removeFirst()
         if let data = pending.removeValue(forKey: key) {
             p.writeValue(data, for: c, type: type)
+            lastSentAt[key] = Date(); lastSent[key] = data
             log("→ " + LED.hex(data))
             if type == .withResponse {
                 awaitingAck = true
+                writeStartedAt = Date()
                 // Filet de sécurité si l'acquittement n'arrive jamais
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                     guard let self, self.awaitingAck else { return }
@@ -165,7 +192,7 @@ final class BLEConsole: ObservableObject {
     struct Line: Identifiable { let id: Int; let text: String }
     @Published private(set) var lines: [Line] = []
     private var next = 0
-    private static let time: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f }()
+    private static let time: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"; return f }()
 
     func append(_ s: String) {
         lines.append(Line(id: next, text: Self.time.string(from: Date()) + "  " + s))
@@ -246,6 +273,8 @@ extension BLEManager: CBPeripheralDelegate {
         }
         guard let wc = writeChar else { log("✖ Caractéristique FFE1 introuvable"); return }
         awaitingAck = false; pumping = false
+        // Le contrôleur a pu être éteint ou réglé ailleurs entre-temps : tout renvoyer
+        lastSent.removeAll(); lastSentAt.removeAll()
         log("FFE1 : " + [wc.properties.contains(.write) ? "écriture acquittée" : nil,
                          wc.properties.contains(.writeWithoutResponse) ? "écriture sans réponse" : nil].compactMap { $0 }.joined(separator: " + "))
         status = .connected
@@ -258,6 +287,8 @@ extension BLEManager: CBPeripheralDelegate {
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error { log("✖ écriture : \(error.localizedDescription)") }
+        let ms = Int(Date().timeIntervalSince(writeStartedAt) * 1000)
+        if awaitingAck && ms > 100 { log("⚠︎ acquittement lent : \(ms) ms") }
         awaitingAck = false
         pump()
     }
