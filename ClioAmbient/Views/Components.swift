@@ -425,9 +425,13 @@ struct ConnectCard: View {
             VStack(spacing: 12) {
                 Text(title).font(.headline)
                 Text(hint).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                if app.ble.found.count > 1 {
+                if app.ble.found.count > 1 || (app.ble.picking && !app.ble.found.isEmpty) {
                     ForEach(app.ble.found) { f in
                         PillButton(title: "\(f.name)  ·  \(f.rssi) dBm", systemImage: "dot.radiowaves.left.and.right") { app.ble.connect(f.id) }
+                    }
+                    if app.ble.status != .scanning {
+                        Button("Relancer la recherche") { Haptics.tap(); app.ble.startScan() }
+                            .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                     }
                 } else {
                     Button { Haptics.tap(); app.ble.startScan() } label: {
@@ -459,7 +463,9 @@ struct ConnectCard: View {
         case .bluetoothOff: return "Active le Bluetooth dans le Centre de contrôle."
         case .unauthorized: return "Autorise le Bluetooth dans Réglages → AURA."
         case .connecting: return "Le contrôleur doit être allumé et à portée."
-        default: return app.ble.found.count > 1 ? "Plusieurs contrôleurs trouvés, choisis le tien :" : "Allume le contrôleur, puis lance la recherche."
+        default:
+            if app.ble.picking { return app.ble.found.isEmpty ? "Recherche des contrôleurs à portée…" : "Choisis le contrôleur :" }
+            return app.ble.found.count > 1 ? "Plusieurs contrôleurs trouvés, choisis le tien :" : "Allume le contrôleur, puis lance la recherche."
         }
     }
 }

@@ -16,7 +16,8 @@ struct CustomEffect: Codable, Equatable {
 }
 
 struct AppSettings: Codable, Equatable {
-    var applyDefaultOnConnect = true
+    /// Faux : à la connexion, on remet la dernière ambiance utilisée (couleur, effet, scène…)
+    var applyDefaultOnConnect = false
     var haptics = true
 }
 
@@ -42,6 +43,8 @@ struct PersistedState: Codable {
     var rgbVoice: Int? = nil
     /// Passage unique à la cible « Les deux » quand les effets ont commencé à piloter aussi le canal RGB
     var targetMigrated: Bool? = nil
+    /// Passage unique à « reprendre la dernière ambiance » (l'ancien défaut forçait rouge 100 % à chaque connexion)
+    var restoreMigrated: Bool? = nil
 }
 
 /// État de l'appli + envoi des commandes au contrôleur.
@@ -62,6 +65,7 @@ final class AppState: ObservableObject {
             s.favorites = s.favorites.map { f in f.flatMap { lib[$0.id] } ?? f }
             // L'ancienne valeur par défaut « Symphonie » laissait les LED RGB de côté
             if s.targetMigrated == nil { s.target = .sync; s.targetMigrated = true }
+            if s.restoreMigrated == nil { s.settings.applyDefaultOnConnect = false; s.restoreMigrated = true }
         } else {
             s = PersistedState()
         }
@@ -69,6 +73,11 @@ final class AppState: ObservableObject {
         ble.onConnected = { [weak self] in self?.didConnect() }
         // Relaye les changements du BLE pour rafraîchir l'UI
         ble.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
+    }
+
+    func saveNow() {
+        saveWork?.cancel()
+        if let d = try? JSONEncoder().encode(s) { UserDefaults.standard.set(d, forKey: Self.storeKey) }
     }
 
     private func scheduleSave() {

@@ -187,8 +187,9 @@ struct AdvancedView: View {
             SectionHeader(title: "Réglages").padding(.bottom, 8)
             Toggle(isOn: $app.s.settings.applyDefaultOnConnect) {
                 VStack(alignment: .leading) {
-                    Text("État au démarrage").font(.body.weight(.semibold))
-                    Text("Allume en rouge à 100 % à chaque connexion").font(.caption).foregroundStyle(.secondary)
+                    Text("Forcer rouge au démarrage").font(.body.weight(.semibold))
+                    Text(app.s.settings.applyDefaultOnConnect ? "Allume en rouge à 100 % à chaque connexion"
+                         : "Désactivé : reprend la dernière ambiance utilisée").font(.caption).foregroundStyle(.secondary)
                 }
             }
             .tint(.green)
@@ -210,6 +211,7 @@ struct AdvancedView: View {
                 }
                 Spacer()
                 if app.ble.isConnected {
+                    Button("Changer") { Haptics.tap(); app.ble.switchController() }.buttonStyle(.bordered).tint(.white)
                     Button("Déconnecter") { app.ble.disconnect() }.buttonStyle(.bordered).tint(.white)
                 } else {
                     Button("Rechercher") { app.ble.startScan() }.buttonStyle(.bordered).tint(.white)

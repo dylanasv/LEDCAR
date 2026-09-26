@@ -30,6 +30,8 @@ final class BLEManager: NSObject, ObservableObject {
     @Published private(set) var status: Status = .idle
     @Published private(set) var deviceName: String?
     @Published private(set) var found: [Found] = []
+    /// Choix manuel en cours (« Changer de contrôleur ») : pas de connexion automatique, même à un seul trouvé
+    @Published private(set) var picking = false
     /// Journal séparé : il change à chaque trame, on ne veut pas redessiner toute l'appli pour ça.
     let console = BLEConsole()
 
@@ -96,7 +98,17 @@ final class BLEManager: NSObject, ObservableObject {
         connect(p)
     }
 
+    /// Se déconnecte du contrôleur actuel et laisse choisir dans la liste des contrôleurs à portée.
+    func switchController() {
+        picking = true
+        UserDefaults.standard.removeObject(forKey: lastDeviceKey)
+        startScan()
+        // Après startScan, qui remet ce drapeau à faux : sinon la reconnexion auto repartirait vers l'ancien
+        if let p = peripheral { userDisconnected = true; central.cancelPeripheralConnection(p) }
+    }
+
     private func connect(_ p: CBPeripheral) {
+        picking = false
         peripheral = p
         p.delegate = self
         status = .connecting
@@ -226,9 +238,9 @@ extension BLEManager: CBCentralManagerDelegate {
             log("Trouvé : \(name) (\(RSSI) dBm)")
         }
         // Un seul contrôleur trouvé → connexion directe
-        if found.count == 1, status == .scanning {
+        if found.count == 1, status == .scanning, !picking {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                guard let self, self.status == .scanning, self.found.count == 1 else { return }
+                guard let self, self.status == .scanning, self.found.count == 1, !self.picking else { return }
                 self.connect(peripheral.identifier)
             }
         }
@@ -245,10 +257,13 @@ extension BLEManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        // Ancien contrôleur qui finit de se déconnecter alors qu'un autre a déjà été choisi
+        guard self.peripheral == nil || self.peripheral?.identifier == peripheral.identifier else { return }
         writeChar = nil
         log("Déconnecté")
         if userDisconnected {
-            status = .idle
+            // « Changer de contrôleur » relance la recherche avant que la déconnexion n'arrive
+            status = central.isScanning ? .scanning : .idle
         } else {
             // Reconnexion automatique : iOS attend que l'appareil soit de nouveau à portée
             status = .connecting

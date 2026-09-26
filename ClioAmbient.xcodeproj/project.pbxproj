@@ -242,6 +242,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AURA;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AURA utilise le Bluetooth pour piloter le kit LED de ta voiture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -272,6 +273,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = AURA;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "AURA utilise le Bluetooth pour piloter le kit LED de ta voiture.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

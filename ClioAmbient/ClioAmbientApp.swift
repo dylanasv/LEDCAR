@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct ClioAmbientApp: App {
     @StateObject private var app = AppState()
+    @Environment(\.scenePhase) private var phase
 
     var body: some Scene {
         WindowGroup {
@@ -10,6 +11,8 @@ struct ClioAmbientApp: App {
                 .environmentObject(app)
                 .preferredColorScheme(.dark)
         }
+        // L'appli peut être fermée juste après un choix : la dernière ambiance doit être écrite tout de suite
+        .onChange(of: phase) { _, p in if p != .active { app.saveNow() } }
     }
 }
 
