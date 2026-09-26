@@ -14,6 +14,8 @@ struct AdvancedView: View {
     @State private var showRGB = false
     @State private var showConsole = false
     @State private var raw = ""
+    @State private var pixels = 60
+    @State private var order = 3
     @FocusState private var hexFocused: Bool
 
     var body: some View {
@@ -23,6 +25,7 @@ struct AdvancedView: View {
                 ConnectCard()
                 wheelCard
                 zonesCard
+                stripCard
                 customCard
                 settingsCard
             }
@@ -121,6 +124,55 @@ struct AdvancedView: View {
             ZoneRow(key: "rgb", title: "RGB", subtitle: "Bandes simples")
         }
         .card()
+    }
+
+    // MARK: Barres Symphonie
+    private var stripCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Barres Symphonie")
+            Text("Le contrôleur étale ses effets (arc-en-ciel « Rêve »…) sur ce nombre de LED. Plus il est petit, plus la palette entière tient sur une barre. Mets le nombre de LED d'une barre, puis ajuste à l'œil.")
+                .font(.footnote).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                stepButton("-10") { pixels -= 10 }
+                stepButton("-1") { pixels -= 1 }
+                VStack(spacing: 0) {
+                    Text("\(pixels)").font(.system(size: 34, weight: .bold, design: .rounded)).contentTransition(.numericText())
+                    Text("LED").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .animation(.snappy, value: pixels)
+                stepButton("+1") { pixels += 1 }
+                stepButton("+10") { pixels += 10 }
+            }
+            HStack {
+                Text("Ordre des couleurs").font(.subheadline)
+                Spacer()
+                Picker("Ordre des couleurs", selection: $order) {
+                    ForEach(Array(["RGB", "RBG", "GRB", "GBR", "BRG", "BGR"].enumerated()), id: \.offset) { i, name in
+                        Text(name + (i + 1 == 3 ? " (défaut)" : "")).tag(i + 1)
+                    }
+                }
+                .tint(.white)
+            }
+            Text("Si le rouge s'affiche en vert (ou l'inverse) après l'envoi, change l'ordre des couleurs.")
+                .font(.footnote).foregroundStyle(.secondary)
+            PillButton(title: "Envoyer et lancer Rêve", systemImage: "paperplane.fill", active: true) {
+                app.sendStripConfig(pixels: pixels, order: order)
+                if app.s.mode != .effect { app.playEffect(1) }
+            }
+        }
+        .card()
+        .onAppear { pixels = app.s.stripPixels ?? 60; order = app.s.colorOrder ?? 3 }
+    }
+
+    private func stepButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.selection(); action(); pixels = max(1, min(255, pixels))
+        } label: {
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                .frame(width: 48, height: 40).background(Capsule().fill(.white.opacity(0.1)))
+        }
+        .buttonStyle(PressStyle())
     }
 
     // MARK: Effet personnalisé

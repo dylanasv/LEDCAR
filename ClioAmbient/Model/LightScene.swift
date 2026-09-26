@@ -71,9 +71,6 @@ enum SceneLibrary {
                           colors: Array(repeating: [base, peak], count: 4).flatMap { $0 }, style: 5, direction: 0,
                           speed: 100, brightness: 100, gradient: [base, base, peak, base])
     }
-    /// Roue chromatique complète en 8 cases (la dernière reboucle vers le rouge)
-    static let rainbow8 = ["#FF0000", "#FF7A00", "#FFE600", "#00FF00", "#00FFFF", "#0000FF", "#8A00FF", "#FF00C8"]
-
     private static func fx(_ id: String, _ name: String, _ effect: Int, speed: Int = 100, bri: Int = 100) -> LightScene {
         LightScene(id: id, name: name, category: "Animées", mode: .effect, effect: effect, speed: speed, brightness: bri)
     }
@@ -110,15 +107,6 @@ enum SceneLibrary {
         fx("s-flux", "Flux jaune · cyan", 51, bri: 90),
         grad("s-gyro", "Gyrophare", ["#FF0000", "#0030FF"], style: 2, bri: 100, cat: "Animées"),
 
-        // TEST — trouver l'effet qui montre tout l'arc-en-ciel en même temps sur les barres Symphonie.
-        // Les effets intégrés étalent la palette sur une longueur fixe (2-3 couleurs visibles sur une barre courte) ;
-        // l'effet personnalisé impose nos 8 couleurs. À réduire à la variante retenue après essai.
-        grad("t-rb-course", "Test A · perso Course", rainbow8, style: 7, bri: 100, cat: "Test arc-en-ciel"),
-        grad("t-rb-empile", "Test B · perso Empilement", rainbow8, style: 4, bri: 100, cat: "Test arc-en-ciel"),
-        fx("t-rb-flux", "Test C · Flux 7 couleurs", 39).in("Test arc-en-ciel"),
-        fx("t-rb-defil", "Test D · Défilement 7 couleurs", 122).in("Test arc-en-ciel"),
-        fx("t-rb-balai", "Test E · Balayage 7 couleurs", 199).in("Test arc-en-ciel"),
-
         star("s-star-rouge", "Étoile rouge", "#FF0000"),
         star("s-star-orange", "Étoile orange", "#FF6A00"),
         star("s-star-ambre", "Étoile ambrée", "#FFB000"),
@@ -139,8 +127,4 @@ enum SceneLibrary {
         for s in suggestions where !seen.contains(s.category) { seen.append(s.category) }
         return ["Toutes"] + seen
     }
-}
-
-private extension LightScene {
-    func `in`(_ category: String) -> LightScene { var s = self; s.category = category; return s }
 }

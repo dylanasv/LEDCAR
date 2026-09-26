@@ -63,6 +63,11 @@ enum LED {
     static func customColor(index: Int, _ r: Int, _ g: Int, _ b: Int, count: Int) -> Data { f7B([index, 0x0E, 253, r, g, b, count]) }
     static func customMode(_ style: Int) -> Data { f7B([0xFF, 0x13, style, 255, 255, 255, 255]) }
 
+    /// Réglage des barres Symphonie (appli d'origine, `setConfigSPI`) : nombre de LED sur lequel le contrôleur
+    /// étale ses effets, et ordre des couleurs (1 RGB, 2 RBG, 3 GRB, 4 GBR, 5 BRG, 6 BGR).
+    /// Trame confirmée sur une vraie config « 132 pixels, GRB » : 7B FF 05 04 00 84 03 FF BF.
+    static func configSPI(pixels: Int, order: Int) -> Data { f7B([0xFF, 5, 4, 0, pixels, order, 0xFF]) }
+
     static func hex(_ d: Data) -> String { d.map { String(format: "%02X", $0) }.joined(separator: " ") }
 }
 
