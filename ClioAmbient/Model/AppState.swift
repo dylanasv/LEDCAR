@@ -150,6 +150,10 @@ final class AppState: ObservableObject {
         case .effect: return EffectCatalog.rgbCompanion(for: s.effect ?? EffectCatalog.autoID)
         case .custom:
             let cols = s.custom.slots.compactMap { $0 }.compactMap(ColorMath.hexToRGB)
+            // Dégradé multicolore (arc-en-ciel) : les LED RGB défilent les 7 couleurs
+            var distinct: [RGB] = []
+            for c in cols where !distinct.contains(c) { distinct.append(c) }
+            if distinct.count >= 5, let first = distinct.first { return .mode(RGBMode.fade7, main: first) }
             // La couleur la plus lumineuse : pour une étoile filante c'est la lueur, pas le fond atténué
             return cols.max { $0.r + $0.g + $0.b < $1.r + $1.g + $1.b }.map(RGBCompanion.color)
         }
