@@ -79,6 +79,8 @@ enum RGBMode {
 /// Ce que doit faire le canal RGB pour accompagner ce qui tourne sur la Symphonie.
 enum RGBCompanion: Equatable {
     case color(RGB)
-    case mode(Int)
+    /// Programme animé, précédé de sa couleur principale : si le contrôleur ignore le programme,
+    /// les LED RGB suivent quand même la Symphonie au lieu de garder la couleur précédente.
+    case mode(Int, main: RGB)
     case music(Int)
 }

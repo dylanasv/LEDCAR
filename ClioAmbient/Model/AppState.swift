@@ -40,6 +40,8 @@ struct PersistedState: Codable {
     var favorites: [LightScene?] = [SceneLibrary.suggestions[0], SceneLibrary.suggestions[8], SceneLibrary.suggestions[20]]
     /// Dernier style musical choisi pour le canal RGB (optionnel : les anciennes sauvegardes restent lisibles)
     var rgbVoice: Int? = nil
+    /// Passage unique à la cible « Les deux » quand les effets ont commencé à piloter aussi le canal RGB
+    var targetMigrated: Bool? = nil
 }
 
 /// État de l'appli + envoi des commandes au contrôleur.
@@ -58,6 +60,8 @@ final class AppState: ObservableObject {
             // Les favoris sont des copies : on les remet à jour quand la suggestion d'origine a changé
             let lib = Dictionary(uniqueKeysWithValues: SceneLibrary.suggestions.map { ($0.id, $0) })
             s.favorites = s.favorites.map { f in f.flatMap { lib[$0.id] } ?? f }
+            // L'ancienne valeur par défaut « Symphonie » laissait les LED RGB de côté
+            if s.targetMigrated == nil { s.target = .sync; s.targetMigrated = true }
         } else {
             s = PersistedState()
         }
@@ -156,7 +160,9 @@ final class AppState: ObservableObject {
         switch c {
         case .color(let v):
             ble.send("rgbColor", LED.color(v.r, v.g, v.b, .rgb)); rgbAnimated = false
-        case .mode(let m):
+        case .mode(let m, let main):
+            // La trame couleur a sa propre clé : elle part avant le programme au lieu d'être écrasée par lui
+            ble.send("rgbMain", LED.color(main.r, main.g, main.b, .rgb))
             ble.send("rgbMode", LED.modeRGB(m)); ble.send("rgbSpeed", LED.speedRGB(s.speed)); rgbAnimated = true
         case .music(let n):
             ble.send("voiceRgb", LED.voiceRGB(n)); rgbAnimated = true

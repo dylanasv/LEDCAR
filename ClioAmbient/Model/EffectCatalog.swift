@@ -67,16 +67,17 @@ enum EffectCatalog {
     /// Équivalent d'un effet Symphonie pour le canal RGB : les effets multicolores deviennent un programme
     /// 7 couleurs (saut pour les flashs, fondu sinon), les effets à une ou deux couleurs leur couleur dominante.
     static func rgbCompanion(for id: Int) -> RGBCompanion {
-        guard let (g, _) = byID[id] else { return .mode(RGBMode.fade7) }
+        let red = RGB(r: 255, g: 42, b: 42)
+        guard let (g, _) = byID[id] else { return .mode(RGBMode.fade7, main: red) }
         let chroma = g.palette.filter { $0 != "#000000" && $0 != "#0B0B0B" }
         var distinct: [String] = []
         for c in chroma where !distinct.contains(c) { distinct.append(c) }
-        if Set(distinct) == [col["RD"]!, col["GN"]!, col["BU"]!] { return .mode(g.isFlash ? RGBMode.jump3 : RGBMode.fade3) }
-        if distinct.count >= 3 { return .mode(g.isFlash ? RGBMode.jump7 : RGBMode.fade7) }
         // « blanc · bleu · blanc » : c'est le bleu qui donne le ton
-        let main = distinct.first { $0 != "#FFFFFF" } ?? distinct.first
-        guard let main, let c = ColorMath.hexToRGB(main) else { return .mode(RGBMode.fade7) }
-        return .color(c)
+        let mainHex = distinct.first { $0 != "#FFFFFF" } ?? distinct.first
+        let main = mainHex.flatMap(ColorMath.hexToRGB) ?? red
+        if Set(distinct) == [col["RD"]!, col["GN"]!, col["BU"]!] { return .mode(g.isFlash ? RGBMode.jump3 : RGBMode.fade3, main: main) }
+        if distinct.count >= 3 || mainHex == nil { return .mode(g.isFlash ? RGBMode.jump7 : RGBMode.fade7, main: main) }
+        return .color(main)
     }
 
     private static func build() -> [EffectGroup] {
